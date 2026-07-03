@@ -7,7 +7,28 @@ Newest entry first.
 
 ---
 
-## Cycle 4 — ~03:30 Fri Jul 3 · Review/bug-hunt sweep
+## Cycle 5 — Fri Jul 3 (user-directed) · Hazard engine + real H3
+
+User asked to continue after the PR was opened. Built the next two verifiable
+pieces.
+
+- **`packages/geo`** — implemented for real with `h3-js` (v4), replacing the
+  throwing stubs: `toHazardCell` / `toTileCell` / `cellCenter` / `resolutionOf`
+  / `cellsInBounds` / `neighbors`. Package now builds to `dist` and is consumed
+  as compiled JS.
+- **`services/hazard-engine`** — `HazardEngine`, the confidence / self-heal core
+  (a headline feature): folds `JoltEvent`s into per-H3-cell `HazardRecord`s,
+  Beta-smoothed confidence that rises on detections and decays on clean passes,
+  auto-retire + reactivation, confidence-weighted severity aggregation. Pure and
+  deterministic; cell assignment injected so tests are hermetic.
+
+**Verification:** typecheck clean; **39/39 tests pass** across all packages
+(17 detector + 6 geo + 7 ingestion + 9 hazard-engine). No regressions.
+
+Pushed to the branch → updates PR #1.
+
+**Still deliberately out** (unverifiable here): NestJS HTTP layer, `apps/mobile`
+RN app + native module, Python `ml/` harness.
 
 Stewardship pass over the branch instead of new modules (Phase-1's remaining
 pieces aren't verifiable in this environment).
