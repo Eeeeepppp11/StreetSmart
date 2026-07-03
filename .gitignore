@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# React Native / mobile (apps/mobile)
+apps/mobile/ios/Pods/
+apps/mobile/ios/build/
+apps/mobile/android/.gradle/
+apps/mobile/android/build/
+apps/mobile/android/app/build/
+*.keystore
+!debug.keystore
+
+# Python ML platform (ml/)
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Large ML artifacts (tracked via the model registry, not git)
+ml/models/*.tflite
+ml/models/*.onnx
+ml/data/raw/
+
+# Editors / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+*.log
