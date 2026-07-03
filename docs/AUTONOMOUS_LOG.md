@@ -7,6 +7,34 @@ Newest entry first.
 
 ---
 
+## Cycle 2 — ~01:21 Fri Jul 3 · Detector streaming emitter
+
+Continued the Phase-1 detector (queued last cycle).
+
+- Refactored `detect.ts` to extract shared `emitForPeak` + `dynamicSeries`
+  helpers, so the batch and streaming paths make **identical** decisions
+  (no risk of drift). `runDetection` now routes through `emitForPeak`; its
+  original 14 tests stayed green.
+- Added `DetectionPipeline` (`pipeline.ts`) — streaming, cursor-based
+  incremental emission for live drives. Buffers samples/GPS, decides a
+  candidate only once its full ±windowHalfMs window has arrived, never
+  re-emits, and self-trims old history. Refractory de-bounce carries across
+  chunk boundaries.
+
+**Verification:** typecheck clean; **17/17 tests pass** (14 prior + 3 new).
+New tests prove: streaming ≡ batch on the same drive; result is independent
+of chunk size (1 / 7 / 250); incremental emission never re-emits an id.
+
+Deferred the Turbo/pnpm PATH item — it's an environment quirk (pnpm not on
+PATH), not a repo defect; `tsc`/`node --test` work directly. Not worth a
+repo change; the fix is `npm i -g pnpm` on the host.
+
+**Next cycles:** wire `DetectionPipeline` into `apps/mobile`'s (planned)
+native sample stream; begin `services/ingestion` JoltEvent validation module
+(pure TS, testable) against the shared contract.
+
+---
+
 ## Cycle 1 — 00:04–~01:00 Fri Jul 3 · Phase-1 detection core
 
 **Branch:** `phase-1-detector` (off `main`; nothing pushed).

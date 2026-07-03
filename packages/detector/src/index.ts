@@ -6,6 +6,7 @@ export type { DetectionResult } from "./classify.js";
 export { classify } from "./classify.js";
 export type { GpsFix, PipelineDeps } from "./detect.js";
 export { runDetection } from "./detect.js";
+export { DetectionPipeline } from "./pipeline.js";
 export type { RecordedDrive } from "./replay.js";
 export { replayDrive } from "./replay.js";
 export type { SynthImpulse, SynthOptions } from "./synth.js";

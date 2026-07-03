@@ -24,6 +24,9 @@ SensorSample[] ──► gravity projection (mount-independent)
   emit**, so swapping in the trained model later is a drop-in.
 - **`runDetection`** — batch scan of a drive → `JoltEvent[]`. Deterministic (no
   wall-clock; ids and time come from injected `PipelineDeps` + GPS fixes).
+- **`DetectionPipeline`** — streaming wrapper over the same `emitForPeak`
+  decision, for live, incremental emission (never re-emits). Feeding a drive in
+  chunks yields the same events as the batch path — verified in tests.
 - **`replayDrive`** / **`RecordedDrive`** — the sensor-replay harness fixture
   format. Golden drives replay identically, so detector changes are
   regression-tested without re-driving. The Python `ml/` platform consumes the
@@ -49,7 +52,7 @@ normalisation, event de-bouncing (refractory), and replay determinism.
 
 ## Next steps
 
-- **Streaming emitter** — `runDetection` is batch; add a cursor-based wrapper for
-  low-latency, incremental emission during a live drive (documented TODO).
+- **Wire into `apps/mobile`** — drive `DetectionPipeline` from the native sensing
+  module's batched sample stream + the GPS stream.
 - **ML swap** — replace the `classify` heuristic with the TFLite model behind the
   same `DetectionResult` interface once Phase-1 data is collected.

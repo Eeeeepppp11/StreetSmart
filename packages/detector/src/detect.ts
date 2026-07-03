@@ -31,7 +31,8 @@ export interface PipelineDeps {
   modelVersion: string;
 }
 
-function nearestFix(gps: GpsFix[], t: number): GpsFix | undefined {
+/** Nearest GPS fix to a given time (used to locate an event). */
+export function nearestFix(gps: GpsFix[], t: number): GpsFix | undefined {
   if (gps.length === 0) return undefined;
   let best = gps[0]!;
   let bestD = Math.abs(best.t - t);
@@ -65,10 +66,59 @@ function buildEvent(
 }
 
 /**
+ * Evaluate the window around a candidate peak and return a JoltEvent, or null if
+ * the window is incomplete, unlocatable, or classifies as a non-event. Shared by
+ * the batch scanner and the streaming pipeline so both make identical decisions.
+ */
+export function emitForPeak(
+  samples: SensorSample[],
+  gps: GpsFix[],
+  peakT: number,
+  deps: PipelineDeps,
+  config: DetectorConfig = DEFAULT_CONFIG
+): JoltEvent | null {
+  const half = config.windowHalfMs;
+  const window: SensorSample[] = [];
+  for (const s of samples) {
+    if (s.t >= peakT - half && s.t <= peakT + half) window.push(s);
+  }
+  if (window.length < 5) return null;
+  // Require the window to actually straddle the peak on both sides.
+  const lo = window[0]!.t;
+  const hi = window[window.length - 1]!.t;
+  if (peakT - lo < half * 0.5 || hi - peakT < half * 0.5) return null;
+
+  const fix = nearestFix(gps, peakT);
+  if (!fix) return null;
+  const res = classify(extractFeatures(window), fix.speedMps, config);
+  if (res.classification === "other" || res.confidence < config.minConfidence) {
+    return null;
+  }
+  return buildEvent(fix, res, deps);
+}
+
+/** Per-sample dynamic-acceleration magnitude via a running gravity EMA. */
+export function dynamicSeries(samples: SensorSample[], alpha = 0.05): number[] {
+  const n = samples.length;
+  const dyn = new Array<number>(n);
+  if (n === 0) return dyn;
+  let g = { ...samples[0]!.accel };
+  for (let i = 0; i < n; i++) {
+    const a = samples[i]!.accel;
+    g = {
+      x: g.x + alpha * (a.x - g.x),
+      y: g.y + alpha * (a.y - g.y),
+      z: g.z + alpha * (a.z - g.z),
+    };
+    dyn[i] = norm({ x: a.x - g.x, y: a.y - g.y, z: a.z - g.z });
+  }
+  return dyn;
+}
+
+/**
  * Batch detector: scans a recorded drive (samples + GPS fixes, both time-sorted
- * on the same clock) and returns the emitted {@link JoltEvent}s. This is the
- * deterministic core that both the replay harness and the on-device pipeline
- * run. Requires at least one GPS fix — without location a hazard can't be placed.
+ * on the same clock) and returns the emitted {@link JoltEvent}s. Deterministic;
+ * requires at least one GPS fix — without location a hazard can't be placed.
  */
 export function runDetection(
   samples: SensorSample[],
@@ -80,20 +130,7 @@ export function runDetection(
   const events: JoltEvent[] = [];
   if (n < 5 || gps.length === 0) return events;
 
-  // Running gravity estimate (EMA) → per-sample dynamic-acceleration magnitude.
-  let g = { ...samples[0]!.accel };
-  const alpha = 0.05;
-  const dyn = new Array<number>(n);
-  for (let i = 0; i < n; i++) {
-    const a = samples[i]!.accel;
-    g = {
-      x: g.x + alpha * (a.x - g.x),
-      y: g.y + alpha * (a.y - g.y),
-      z: g.z + alpha * (a.z - g.z),
-    };
-    dyn[i] = norm({ x: a.x - g.x, y: a.y - g.y, z: a.z - g.z });
-  }
-
+  const dyn = dynamicSeries(samples);
   const firstT = samples[0]!.t;
   const lastT = samples[n - 1]!.t;
   const half = config.windowHalfMs;
@@ -103,7 +140,6 @@ export function runDetection(
   let i = 0;
   while (i < n) {
     if (dyn[i]! >= config.triggerAccel) {
-      // Walk the run above the exit threshold; find its peak sample.
       let j = i;
       let peakIdx = i;
       let peakVal = dyn[i]!;
@@ -117,22 +153,10 @@ export function runDetection(
       const peakT = samples[peakIdx]!.t;
       const ripe = peakT - half >= firstT && peakT + half <= lastT;
       if (ripe && peakT - lastEmitT >= config.refractoryMs) {
-        const window: SensorSample[] = [];
-        for (let k = 0; k < n; k++) {
-          const tk = samples[k]!.t;
-          if (tk >= peakT - half && tk <= peakT + half) window.push(samples[k]!);
-        }
-        if (window.length >= 5) {
-          const f = extractFeatures(window);
-          const fix = nearestFix(gps, peakT)!;
-          const res = classify(f, fix.speedMps, config);
-          if (
-            res.classification !== "other" &&
-            res.confidence >= config.minConfidence
-          ) {
-            events.push(buildEvent(fix, res, deps));
-            lastEmitT = peakT;
-          }
+        const ev = emitForPeak(samples, gps, peakT, deps, config);
+        if (ev) {
+          events.push(ev);
+          lastEmitT = peakT;
         }
       }
       i = j;
