@@ -4,7 +4,7 @@ import { cross, norm, lcg } from "./util.js";
 export interface SynthImpulse {
   /** Centre time of the event, milliseconds. */
   atMs: number;
-  /** Peak dynamic vertical acceleration, m/s^2. */
+  /** Nominal amplitude scale for the impulse, m/s^2 (approximate peak). */
   peak: number;
   /**
    * "sharp" ⇒ bipolar, high-jerk strike (pothole-like).

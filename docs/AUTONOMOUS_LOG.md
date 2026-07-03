@@ -7,7 +7,29 @@ Newest entry first.
 
 ---
 
-## Cycle 3 — ~02:26 Fri Jul 3 · Ingestion intake validation
+## Cycle 4 — ~03:30 Fri Jul 3 · Review/bug-hunt sweep
+
+Stewardship pass over the branch instead of new modules (Phase-1's remaining
+pieces aren't verifiable in this environment).
+
+- Re-read detector + ingestion critically. **No correctness bugs found.**
+  Hand-traced the pipeline trim bounds: undecided candidates are always recent
+  (`peakT > latestT − half`), so their leading windows are never trimmed — and
+  the chunk-size-independence tests (1/7/250) already exercise this.
+- Fixed two quality issues:
+  - `ingestion/validation.test.ts` — removed confusing dead code
+    (`void notArray`) and a mislabeled case; added explicit null / not-an-array
+    assertions.
+  - `synth.ts` — corrected the `peak` doc comment (it's an amplitude *scale*,
+    ≈0.74× the literal lobe after the derivative-of-Gaussian normalisation; the
+    constant is deliberately left as-is since thresholds/tests are calibrated to
+    it).
+
+**Verification:** 24/24 tests still pass.
+
+**Status:** Phase-1 buildable+testable work is complete and clean. Further ticks
+will likely be quiet — I'll do a quick check and taper unless something new
+appears.
 
 Started `services/ingestion` (Phase-1 collect-only) with the piece that's
 testable without a NestJS runtime: intake validation.

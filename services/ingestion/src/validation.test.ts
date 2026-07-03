@@ -72,6 +72,7 @@ test("upload: keeps valid events, reports bad ones per-index", () => {
 });
 
 test("upload: rejects a malformed envelope", () => {
+  // missing anonDeviceId
   const noDevice = validateUpload({
     appVersion: "1.0.0",
     sentAt: "2026-07-03T09:01:00.000Z",
@@ -80,12 +81,17 @@ test("upload: rejects a malformed envelope", () => {
   assert.equal(noDevice.ok, false);
   assert.ok(noDevice.envelopeErrors.length > 0);
 
-  const notArray = validateUpload(validUpload([]) as object);
-  // empty events → envelope error
+  // empty events array
   assert.equal(validateUpload(validUpload([])).ok, false);
+
+  // non-object inputs
   assert.equal(validateUpload("nope").ok, false);
-  assert.ok(validateUpload({ ...validUpload([]), events: 5 }).ok === false);
-  void notArray;
+  assert.equal(validateUpload(null).ok, false);
+
+  // events present but not an array
+  const badEvents = validateUpload({ ...validUpload([]), events: 5 });
+  assert.equal(badEvents.ok, false);
+  assert.ok(badEvents.envelopeErrors.some((e) => e.includes("array")));
 });
 
 test("upload: flags oversize batches", () => {
