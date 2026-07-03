@@ -7,7 +7,27 @@ Newest entry first.
 
 ---
 
-## Cycle 2 — ~01:21 Fri Jul 3 · Detector streaming emitter
+## Cycle 3 — ~02:26 Fri Jul 3 · Ingestion intake validation
+
+Started `services/ingestion` (Phase-1 collect-only) with the piece that's
+testable without a NestJS runtime: intake validation.
+
+- Added `EventUpload` wire contract to `shared-types` (anonymous batch envelope).
+- `services/ingestion/validation.ts`:
+  - `validateJoltEvent` — structural validation → reconstructed event (drops
+    unknown fields) or per-field errors; no exceptions.
+  - `validateUpload` — envelope validation; lenient per collect-only intent
+    (keep valid events, report bad ones per-index, reject malformed/oversize
+    envelopes). Sanity caps: MAX_BATCH_SIZE=1000, MAX_SPEED_MPS=90.
+
+**Verification:** typecheck clean (shared-types + ingestion); **24/24 tests pass**
+(17 detector + 7 new ingestion). Confirmed the shared-types change didn't
+regress the detector.
+
+**Next cycles:** the NestJS HTTP layer + auth + rate-limit + queue publish
+(needs @nestjs deps — heavier); or wire `DetectionPipeline` into `apps/mobile`.
+Approaching a good stopping point for autonomous building — later ticks may
+taper to a review/bug-hunt sweep rather than new modules.
 
 Continued the Phase-1 detector (queued last cycle).
 
