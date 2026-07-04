@@ -7,7 +7,23 @@ Newest entry first.
 
 ---
 
-## Cycle 11 — Sat Jul 4 ~01:00 (autonomous, until 10 AM Sat) · Scorecards + privacy
+## Cycle 12 — Sat Jul 4 ~12:20 (user-directed) · Municipal data export
+
+User asked to start Phase 4 proper. (Note: machine slept ~01:10–12:15, so the
+overnight loop never fired; resumed on request.)
+
+- **`services/analytics/export.ts`** — `buildMunicipalExport`: the sellable
+  aggregated road-condition dataset. Per-coarse-cell open/fixed counts +
+  severity stats; k-anonymity enforced by **suppressing** under-k cells; rows
+  carry no contributor ids or fine coordinates. Uses `@potholeproof/privacy`.
+- Fixed `packages/privacy` package.json to point at compiled `dist` (it has
+  runtime code, unlike types-only packages).
+
+**Verification:** **82/82 tests pass** (+5 export). Pushed to `phase-3-civic`
+→ PR #3.
+
+Phase-4 remaining: insurer/fleet route-risk product, dashboard app (needs
+Next.js tooling), HTTP layers.
 
 User: "keep building" — two pieces this cycle, both on `phase-3-civic`.
 

@@ -84,6 +84,9 @@ importers:
 
   services/analytics:
     dependencies:
+      '@potholeproof/privacy':
+        specifier: workspace:*
+        version: link:../../packages/privacy
       '@potholeproof/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types

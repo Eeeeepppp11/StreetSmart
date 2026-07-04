@@ -14,7 +14,8 @@
     "test": "node --test \"dist/**/*.test.js\""
   },
   "dependencies": {
-    "@potholeproof/shared-types": "workspace:*"
+    "@potholeproof/shared-types": "workspace:*",
+    "@potholeproof/privacy": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",

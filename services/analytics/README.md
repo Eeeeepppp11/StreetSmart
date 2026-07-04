@@ -16,5 +16,11 @@ minimums enforced before data leaves the warehouse. **Phase 4.**
   District assignment and "now" are injected, so output is deterministic;
   reports with unknown hazards bucket under `unknown`.
 
-Tested with `node --test` (5 cases). The privacy gates live in
-`@potholeproof/privacy`; the HTTP/dashboard layer is still to come.
+- `export.ts` — `buildMunicipalExport(hazards, contributions, { tileOf,
+  districtOf, k })`: the aggregated road-condition dataset for data licensing.
+  Hazards group by coarse H3 cell with open/fixed counts and severity stats;
+  any cell backed by fewer than `k` distinct contributors is **suppressed
+  entirely** (not blurred), and rows carry no contributor ids or fine
+  coordinates — the privacy pipeline enforced in code.
+
+Tested with `node --test` (10 cases). The HTTP/dashboard layer is still to come.
