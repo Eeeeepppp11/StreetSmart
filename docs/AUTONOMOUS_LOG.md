@@ -7,7 +7,20 @@ Newest entry first.
 
 ---
 
-## Cycle 8 — Fri Jul 3 ~21:17 (autonomous, until 10 PM) · Hazard tiles
+## Cycle 9 — Fri Jul 3 (user-directed) · Civic Open311 mapping
+
+After PR #2 merged, started Phase 3 (Report & Verify) on `phase-3-civic`.
+
+- **`services/civic`** — the pure, HTTP-free mapping core:
+  `hazardToOpen311Request` (HazardRecord → Open311 GeoReport v2 payload),
+  `normalizeOpen311Status` (provider status → our `CivicReportStatus`,
+  case-insensitive superset of Open311 + SeeClickFix), and `draftCivicReport`.
+  Targets SF311 (Open311) as the pilot.
+
+**Verification:** typecheck clean; **62/62 tests pass** (+4 civic). No regressions.
+
+Opened as a new PR off `main`. Next: the HTTP adapter (POST + status poll),
+batching/dedup, and auto fix-verification against the hazard engine.
 
 Reviewed the Phase-2 code (proximity + routing) — no bugs. Then built the piece
 that connects the backend to the warn feature.
