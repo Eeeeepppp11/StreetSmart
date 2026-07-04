@@ -15,7 +15,7 @@ Full design: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 ```
 apps/
   mobile/        React Native app — sensing, detection, map/nav, alerts, routing
-  dashboard/     Next.js public scorecard site (Phase 4)
+  dashboard/     Next.js public scorecard site (builds; demo data until live API)
 services/        NestJS backend (TypeScript)
   ingestion/     batched JoltEvent intake → queue (Phase 1: collect-only)
   hazard-engine/ confidence / self-heal engine + hazard tiles

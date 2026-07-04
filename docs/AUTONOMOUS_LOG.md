@@ -7,7 +7,25 @@ Newest entry first.
 
 ---
 
-## Cycle 13 — Sat Jul 4 ~12:40 (user-directed) · Route-risk export
+## Cycle 14 — Sat Jul 4 ~12:50 (user-directed) · Public dashboard
+
+Built the last verifiable Phase-4 piece: the Next.js scorecard site.
+
+- **`apps/dashboard`** — App Router, server-rendered, no client JS. The page
+  calls `buildScorecard` + `buildRouteRiskExport` from
+  `@potholeproof/analytics` over a labelled demo dataset shaped like real
+  engine output. Static prerender means the aggregation engine executes at
+  build time — `next build` is a real end-to-end check.
+- `services/analytics` package.json now points at compiled `dist` (runtime
+  consumer exists); `.gitignore` covers `.next/`.
+
+**Verification:** `next build` clean (Next 15.5, 4 static pages, types
+validated); prerendered HTML confirmed to contain the district tables;
+**87/87 tests still pass**.
+
+Phase-4 status: scorecards, privacy, municipal + route-risk exports, dashboard
+— all built. Remaining across the project: live HTTP layers, the RN mobile
+app, ML training rig (all need external tooling/services).
 
 User: "go" — built the insurer/fleet data product.
 
