@@ -19,6 +19,8 @@ export interface CivicReport {
   externalId?: string;
   status: CivicReportStatus;
   submittedAt?: ISODateString;
+  /** When the report reached a closed state (city fix or auto-verification). */
+  closedAt?: ISODateString;
   lastCheckedAt?: ISODateString;
   photoUrl?: string;
 }

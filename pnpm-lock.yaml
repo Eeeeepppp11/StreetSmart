@@ -44,6 +44,22 @@ importers:
         specifier: ^5.5.4
         version: 5.9.3
 
+  packages/privacy:
+    dependencies:
+      '@potholeproof/geo':
+        specifier: workspace:*
+        version: link:../geo
+      '@potholeproof/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+    devDependencies:
+      '@types/node':
+        specifier: ^22.7.0
+        version: 22.20.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
+
   packages/proximity:
     dependencies:
       '@potholeproof/geo':
@@ -62,6 +78,19 @@ importers:
 
   packages/shared-types:
     devDependencies:
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
+
+  services/analytics:
+    dependencies:
+      '@potholeproof/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
+    devDependencies:
+      '@types/node':
+        specifier: ^22.7.0
+        version: 22.20.0
       typescript:
         specifier: ^5.5.4
         version: 5.9.3

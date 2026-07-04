@@ -28,6 +28,7 @@ packages/
   geo/           H3 spatial helpers + distance/bearing (h3-js)
   detector/      Phase-1 on-device detection core (pure TS, tested)
   proximity/     on-device "pothole ahead" proximity-alert engine
+  privacy/       trip-endpoint trimming + k-anonymity gates
 infra/           Postgres+PostGIS, Redis, event queue, warehouse (IaC)
 ```
 

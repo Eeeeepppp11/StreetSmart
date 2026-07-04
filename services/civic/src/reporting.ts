@@ -40,15 +40,18 @@ export function hazardsToReport(
 /**
  * Auto fix-verification — the closed loop. When the hazard engine has retired a
  * reported hazard (enough clean drive-throughs ⇒ the pothole is gone), close its
- * still-open civic report. Terminal reports are returned unchanged.
+ * still-open civic report, stamping `closedAt` when a timestamp is supplied.
+ * Terminal reports are returned unchanged.
  */
 export function reconcileReport(
   report: CivicReport,
-  hazard: HazardRecord
+  hazard: HazardRecord,
+  closedAt?: string
 ): CivicReport {
   if (report.status === "closed" || report.status === "rejected") return report;
   if (hazard.status === "retired" || hazard.status === "verified_fixed") {
-    return { ...report, status: "closed" };
+    const next: CivicReport = { ...report, status: "closed" };
+    return closedAt !== undefined ? { ...next, closedAt } : next;
   }
   return report;
 }

@@ -7,7 +7,25 @@ Newest entry first.
 
 ---
 
-## Cycle 10 — Sat Jul 4 ~00:45 (autonomous, until 10 AM Sat) · Fix-verification + dedup
+## Cycle 11 — Sat Jul 4 ~01:00 (autonomous, until 10 AM Sat) · Scorecards + privacy
+
+User: "keep building" — two pieces this cycle, both on `phase-3-civic`.
+
+- **`services/analytics`** — `buildScorecard(reports, hazards, {districtOf,
+  asOf})`: per-district repair-time scorecards (counts, median/mean repair days,
+  oldest-open age). Deterministic (district mapper + "now" injected). Supporting
+  contract additions: `CivicReport.closedAt`, `reconcileReport(..., closedAt?)`
+  stamps closure time.
+- **`packages/privacy`** — `trimTraceEndpoints` (along-path endpoint trimming so
+  home/work never leaves the device; short trips vanish entirely) and
+  `meetsKAnonymity` (≥k distinct contributors gate for exports).
+
+One test-fixture fix along the way: the trim boundary test used a nominal
+m/degree constant vs the haversine's actual — rewrote to margin-based
+assertions (code was correct).
+
+**Verification:** all 10 packages typecheck; **77/77 tests pass** (+5 scorecard,
++5 privacy). Pushed to `phase-3-civic` → PR #3.
 
 User asked to keep going until 10 AM (read as Sat 10:00, the nearer boundary).
 Continued Phase 3 on `phase-3-civic`.
