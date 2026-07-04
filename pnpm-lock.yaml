@@ -92,6 +92,22 @@ importers:
         specifier: ^5.5.4
         version: 5.9.3
 
+  services/routing:
+    dependencies:
+      '@potholeproof/geo':
+        specifier: workspace:*
+        version: link:../../packages/geo
+      '@potholeproof/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
+    devDependencies:
+      '@types/node':
+        specifier: ^22.7.0
+        version: 22.20.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
+
 packages:
 
   '@turbo/darwin-64@2.10.2':

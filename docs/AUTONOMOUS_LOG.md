@@ -7,7 +7,23 @@ Newest entry first.
 
 ---
 
-## Cycle 6 — Fri Jul 3 (user-directed) · Proximity-alert engine
+## Cycle 7 — Fri Jul 3 ~20:15 (autonomous, until 10 PM) · Hazard-aware routing
+
+User asked to keep working until 10 PM. Continued on `phase-2-proximity` (it
+carries the geo distance/bearing helpers) with the "reroute" half of the loop.
+
+- **`services/routing`** — pure hazard-aware route scoring:
+  `routeHazardExposure` (0..1, active hazards within a corridor contribute
+  severity×confidence×falloff, saturated), plus `scoreRoute` / `chooseRoute`
+  that blend distance with exposure per `RoutePreferences` — avoidance-off picks
+  the shortest, avoidance-on penalises hazardous routes. Planar `pointToSegment`
+  / `pathLength` helpers included.
+
+**Verification:** typecheck clean; **54/54 tests pass** across all packages
+(+5 routing). No regressions.
+
+Pushed to `phase-2-proximity` → updates PR #2 (rescoped to the full Phase-2
+daily-use loop: warn + reroute).
 
 After PR #1 merged to `main`, branched `phase-2-proximity` and built the "warn"
 half of the daily-use loop.
