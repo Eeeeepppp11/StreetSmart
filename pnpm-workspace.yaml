@@ -1,0 +1,6 @@
+# TypeScript workspaces. The Python ML platform (ml/) is intentionally NOT a
+# pnpm workspace — it stands alone with its own tooling (see ml/README.md).
+packages:
+  - "apps/*"
+  - "services/*"
+  - "packages/*"
