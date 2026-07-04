@@ -24,6 +24,11 @@ run proximity alerts offline. **Phase 2.**
   - `active()` / `all()` / `get(cell)` — the map the client + alerts consume.
   - Cell assignment is injected (`cellOf`); wire `geo.toHazardCell` in production.
 
-Tested with `node --test` (9 cases: creation, aggregation, retire, reactivation,
-severity banding, timestamp tracking, no internal-field leakage). Still to come:
-the queue consumer, PostGIS persistence, and the hazard-tile service.
+- `tiles.ts` — `bundleTiles(hazards, { tileOf, generatedAt, ttlSeconds })`:
+  groups hazards into per-tile `HazardTile` bundles (active-only by default) that
+  clients pre-fetch and cache for offline proximity alerts. Deterministic
+  ordering; `tileOf` injected (pass `geo.toTileCell`).
+
+Tested with `node --test` (13 cases: engine creation/aggregation/retire/
+reactivation/severity/timestamps/no-leak, plus tile grouping/filtering/order).
+Still to come: the queue consumer and PostGIS persistence.

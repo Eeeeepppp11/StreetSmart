@@ -7,7 +7,19 @@ Newest entry first.
 
 ---
 
-## Cycle 7 — Fri Jul 3 ~20:15 (autonomous, until 10 PM) · Hazard-aware routing
+## Cycle 8 — Fri Jul 3 ~21:17 (autonomous, until 10 PM) · Hazard tiles
+
+Reviewed the Phase-2 code (proximity + routing) — no bugs. Then built the piece
+that connects the backend to the warn feature.
+
+- **`services/hazard-engine`** — `bundleTiles(hazards, {tileOf, generatedAt,
+  ttlSeconds})`: groups active hazards into per-tile `HazardTile` bundles
+  (deterministic order) that clients cache for offline proximity alerts. Closes
+  the loop hazard-engine → tiles → `packages/proximity`.
+
+**Verification:** typecheck clean; **58/58 tests pass** (+4 tiles). No regressions.
+
+Pushed to `phase-2-proximity` → PR #2.
 
 User asked to keep working until 10 PM. Continued on `phase-2-proximity` (it
 carries the geo distance/bearing helpers) with the "reroute" half of the loop.
