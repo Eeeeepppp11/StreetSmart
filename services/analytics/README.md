@@ -23,4 +23,10 @@ minimums enforced before data leaves the warehouse. **Phase 4.**
   entirely** (not blurred), and rows carry no contributor ids or fine
   coordinates — the privacy pipeline enforced in code.
 
-Tested with `node --test` (10 cases). The HTTP/dashboard layer is still to come.
+- `routerisk.ts` — `buildRouteRiskExport(hazards, contributions, options)`: the
+  insurer/fleet product. One decayed risk score per cell (severity × confidence
+  × half-life recency, saturated to 0..1) plus open/severe counts. Only open
+  hazards count; same suppression + no-identifier contract as the municipal
+  export.
+
+Tested with `node --test` (15 cases). The HTTP/dashboard layer is still to come.

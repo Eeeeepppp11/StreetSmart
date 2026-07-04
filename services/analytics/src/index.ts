@@ -6,3 +6,8 @@ export type {
   MunicipalExportOptions,
   RoadConditionRow,
 } from "./export.js";
+export {
+  buildRouteRiskExport,
+  DEFAULT_ROUTE_RISK_OPTIONS,
+} from "./routerisk.js";
+export type { RouteRiskOptions, RouteRiskRow } from "./routerisk.js";

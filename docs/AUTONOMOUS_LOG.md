@@ -7,6 +7,22 @@ Newest entry first.
 
 ---
 
+## Cycle 13 — Sat Jul 4 ~12:40 (user-directed) · Route-risk export
+
+User: "go" — built the insurer/fleet data product.
+
+- **`services/analytics/routerisk.ts`** — `buildRouteRiskExport`: per-cell risk
+  score = severity × confidence × half-life recency decay (30-day default),
+  saturated to 0..1; open/severe counts; only open hazards count. Same privacy
+  contract as the municipal export: under-k cells suppressed, no contributor
+  ids, no fine coordinates.
+
+**Verification:** **87/87 tests pass** (+5). Pushed to `phase-3-civic` → PR #3.
+
+Phase-4 remaining: the public dashboard app (Next.js) and the HTTP layers.
+
+---
+
 ## Cycle 12 — Sat Jul 4 ~12:20 (user-directed) · Municipal data export
 
 User asked to start Phase 4 proper. (Note: machine slept ~01:10–12:15, so the
