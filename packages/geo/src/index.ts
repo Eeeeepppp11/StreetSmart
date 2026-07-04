@@ -57,3 +57,36 @@ export function cellsInBounds(
 export function neighbors(cell: H3Index, k: number = 1): H3Index[] {
   return gridDisk(cell, k);
 }
+
+const EARTH_RADIUS_M = 6371008.8; // IUGG mean radius
+
+function toRad(deg: number): number {
+  return (deg * Math.PI) / 180;
+}
+function toDeg(rad: number): number {
+  return (rad * 180) / Math.PI;
+}
+
+/** Great-circle distance between two coordinates, in metres (haversine). */
+export function distanceMeters(a: LatLng, b: LatLng): number {
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const la1 = toRad(a.lat);
+  const la2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Initial bearing from `a` to `b`, degrees clockwise from north (0–360). */
+export function bearingDegrees(a: LatLng, b: LatLng): number {
+  const la1 = toRad(a.lat);
+  const la2 = toRad(b.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const y = Math.sin(dLng) * Math.cos(la2);
+  const x =
+    Math.cos(la1) * Math.sin(la2) -
+    Math.sin(la1) * Math.cos(la2) * Math.cos(dLng);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}

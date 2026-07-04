@@ -25,8 +25,9 @@ services/        NestJS backend (TypeScript)
 ml/              Python: replay harness, training, TFLite export, model registry
 packages/
   shared-types/  wire/domain types shared client ↔ backend
-  geo/           H3 spatial helpers
+  geo/           H3 spatial helpers + distance/bearing (h3-js)
   detector/      Phase-1 on-device detection core (pure TS, tested)
+  proximity/     on-device "pothole ahead" proximity-alert engine
 infra/           Postgres+PostGIS, Redis, event queue, warehouse (IaC)
 ```
 

@@ -7,7 +7,52 @@ Newest entry first.
 
 ---
 
-## Cycle 5 — Fri Jul 3 (user-directed) · Hazard engine + real H3
+## Cycle 8 — Fri Jul 3 ~21:17 (autonomous, until 10 PM) · Hazard tiles
+
+Reviewed the Phase-2 code (proximity + routing) — no bugs. Then built the piece
+that connects the backend to the warn feature.
+
+- **`services/hazard-engine`** — `bundleTiles(hazards, {tileOf, generatedAt,
+  ttlSeconds})`: groups active hazards into per-tile `HazardTile` bundles
+  (deterministic order) that clients cache for offline proximity alerts. Closes
+  the loop hazard-engine → tiles → `packages/proximity`.
+
+**Verification:** typecheck clean; **58/58 tests pass** (+4 tiles). No regressions.
+
+Pushed to `phase-2-proximity` → PR #2.
+
+User asked to keep working until 10 PM. Continued on `phase-2-proximity` (it
+carries the geo distance/bearing helpers) with the "reroute" half of the loop.
+
+- **`services/routing`** — pure hazard-aware route scoring:
+  `routeHazardExposure` (0..1, active hazards within a corridor contribute
+  severity×confidence×falloff, saturated), plus `scoreRoute` / `chooseRoute`
+  that blend distance with exposure per `RoutePreferences` — avoidance-off picks
+  the shortest, avoidance-on penalises hazardous routes. Planar `pointToSegment`
+  / `pathLength` helpers included.
+
+**Verification:** typecheck clean; **54/54 tests pass** across all packages
+(+5 routing). No regressions.
+
+Pushed to `phase-2-proximity` → updates PR #2 (rescoped to the full Phase-2
+daily-use loop: warn + reroute).
+
+After PR #1 merged to `main`, branched `phase-2-proximity` and built the "warn"
+half of the daily-use loop.
+
+- **`packages/geo`** — added `distanceMeters` (haversine) + `bearingDegrees`
+  (initial bearing), with tests.
+- **`packages/proximity`** — `upcomingHazards(vehicle, hazards, config?)`: the
+  on-device "pothole ahead" engine. Returns active hazards that are ahead
+  (along-track > 0), within the path corridor (cross-track), within a
+  speed-scaled lookahead, and above confidence/severity floors — nearest-first,
+  with ETA and side (ahead/left/right). Pure geometry; runs every GPS tick with
+  no network.
+
+**Verification:** typecheck clean; **49/49 tests pass** across all packages
+(+8 proximity, +2 geo). No regressions.
+
+Opened as a new PR off `main`.
 
 User asked to continue after the PR was opened. Built the next two verifiable
 pieces.
