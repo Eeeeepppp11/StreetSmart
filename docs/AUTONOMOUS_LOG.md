@@ -7,7 +7,24 @@ Newest entry first.
 
 ---
 
-## Cycle 5 — Fri Jul 3 (user-directed) · Hazard engine + real H3
+## Cycle 6 — Fri Jul 3 (user-directed) · Proximity-alert engine
+
+After PR #1 merged to `main`, branched `phase-2-proximity` and built the "warn"
+half of the daily-use loop.
+
+- **`packages/geo`** — added `distanceMeters` (haversine) + `bearingDegrees`
+  (initial bearing), with tests.
+- **`packages/proximity`** — `upcomingHazards(vehicle, hazards, config?)`: the
+  on-device "pothole ahead" engine. Returns active hazards that are ahead
+  (along-track > 0), within the path corridor (cross-track), within a
+  speed-scaled lookahead, and above confidence/severity floors — nearest-first,
+  with ETA and side (ahead/left/right). Pure geometry; runs every GPS tick with
+  no network.
+
+**Verification:** typecheck clean; **49/49 tests pass** across all packages
+(+8 proximity, +2 geo). No regressions.
+
+Opened as a new PR off `main`.
 
 User asked to continue after the PR was opened. Built the next two verifiable
 pieces.

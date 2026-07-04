@@ -7,6 +7,8 @@ import {
   resolutionOf,
   cellsInBounds,
   neighbors,
+  distanceMeters,
+  bearingDegrees,
   HAZARD_H3_RESOLUTION,
   TILE_H3_RESOLUTION,
 } from "./index.js";
@@ -48,4 +50,17 @@ test("cellsInBounds covers a small box at the requested resolution", () => {
   );
   assert.ok(cells.length > 0);
   for (const c of cells) assert.equal(resolutionOf(c), 10);
+});
+
+test("distanceMeters: zero for same point, ~111 km per degree of latitude", () => {
+  assert.equal(distanceMeters(SF, SF), 0);
+  const oneDegNorth = distanceMeters(SF, { lat: SF.lat + 1, lng: SF.lng });
+  assert.ok(Math.abs(oneDegNorth - 111195) < 500, `got ${oneDegNorth}`);
+});
+
+test("bearingDegrees: north ≈ 0, east ≈ 90", () => {
+  const north = bearingDegrees(SF, { lat: SF.lat + 0.1, lng: SF.lng });
+  const east = bearingDegrees(SF, { lat: SF.lat, lng: SF.lng + 0.1 });
+  assert.ok(north < 1 || north > 359, `north bearing ${north}`);
+  assert.ok(Math.abs(east - 90) < 1, `east bearing ${east}`);
 });
