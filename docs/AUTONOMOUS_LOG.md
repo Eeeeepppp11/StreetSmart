@@ -7,7 +7,21 @@ Newest entry first.
 
 ---
 
-## Cycle 9 — Fri Jul 3 (user-directed) · Civic Open311 mapping
+## Cycle 10 — Sat Jul 4 ~00:45 (autonomous, until 10 AM Sat) · Fix-verification + dedup
+
+User asked to keep going until 10 AM (read as Sat 10:00, the nearer boundary).
+Continued Phase 3 on `phase-3-civic`.
+
+- **`services/civic/reporting.ts`**:
+  - `hazardsToReport(hazards, existingReports, policy?)` — which hazards warrant
+    a new report (active + confident + severe + not already open-reported: dedup).
+  - `reconcileReport(report, hazard)` — **auto fix-verification**, the closed
+    loop: closes an open civic report once its hazard has self-healed (retired
+    via clean passes). Terminal reports untouched.
+
+**Verification:** typecheck clean; **67/67 tests pass** (+5). No regressions.
+
+Pushed to `phase-3-civic` → PR #3.
 
 After PR #2 merged, started Phase 3 (Report & Verify) on `phase-3-civic`.
 

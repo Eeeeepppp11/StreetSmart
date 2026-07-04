@@ -20,6 +20,11 @@ linked `CivicReport` is marked `verified_fixed` — the closed loop. **Phase 3.*
     superset of Open311 + SeeClickFix) into our `CivicReportStatus`.
   - `draftCivicReport(hazard, provider, nextId)` — a pre-submission draft report.
 
-Tested with `node --test` (4 cases). Still to come: the HTTP adapter that POSTs
-these payloads + polls status, batching/dedup, and auto fix-verification against
-the hazard engine.
+- `reporting.ts` — the reporting decisions:
+  - `hazardsToReport(hazards, existingReports, policy?)` — which hazards warrant
+    a new report (active, confident, severe, not already open-reported — dedup).
+  - `reconcileReport(report, hazard)` — **auto fix-verification**: closes an open
+    report once its hazard has self-healed (retired via clean passes).
+
+Tested with `node --test` (9 cases). Still to come: the HTTP adapter that POSTs
+payloads + polls status, and submission batching.
