@@ -1,34 +1,41 @@
-# apps/mobile — PotholeProof app (React Native)
+# apps/mobile — PotholeProof Phase-1 pilot app (Expo)
 
-**Stack:** Bare React Native + TypeScript · `@rnmapbox/maps` (Mapbox) ·
-`react-native-background-geolocation` · `react-native-fast-tflite` (on-device
-model) · `op-sqlite` (local event log) · Zustand + TanStack Query.
+The dash-mount test app: reads accelerometer + gyroscope + GPS, runs the
+**real detection engine** (`@potholeproof/detector`, pure TS) live on the
+phone, logs every jolt, and provides the ✓/✗ **review screen whose labels
+become the ML training set**.
 
-**Responsibility:** the driver-facing client and the core IP host — the custom
-native sensing module, on-device detection pipeline, local event log, map/nav
-UI, proximity alerts, hazard-aware routing, review-&-submit, and leaderboards.
+Runs in **Expo Go** (SDK 57) — no native build needed, works on iPhone and
+Android from any dev machine.
 
-## Layering (keep the sensing loop native, off the JS bridge)
+## Run it on your phone
 
-1. **Sensing (native)** — `native/ios` (Swift CoreMotion) + `native/android`
-   (Kotlin SensorManager) TurboModule; batches 50–100 Hz accel/gyro + 1 Hz GPS,
-   emits *events*, not raw samples.
-2. **Inference (native + TFLite)** — window → features → classify on-device.
-3. **Store** — `op-sqlite` local event log + cached hazard tiles.
-4. **Sync** — batches `JoltEvent`s up, reconciles `HazardTile`s down.
-5. **Presentation (RN/JS)** — Mapbox UI, alerts, routing, review/submit, gamify.
+1. Install **Expo Go** from the App Store / Play Store.
+2. On the dev machine, from `apps/mobile`:
+   ```bash
+   corepack pnpm@9.12.0 exec expo start
+   ```
+3. Scan the QR code with the phone (same Wi-Fi as the dev machine). If the LAN
+   is blocked (strict firewall), retry with `expo start --tunnel`.
+4. Tap **START DRIVE**, mount the phone, drive. Jolts vibrate + log live.
+5. Tap **END DRIVE** → label each detection ✓ Pothole / ✗ Not → **Save**.
+6. On the home screen, **Export training data** shares the labeled events as
+   JSON — feed that to the `ml/` training rig.
 
-All wire types come from `@potholeproof/shared-types`.
+## What's inside
 
-## Getting started (planned)
+- `App.tsx` — the whole pilot: drive screen (speed, sensor Hz, live jolt
+  count), review/labeling screen, AsyncStorage persistence, JSON export.
+- Sensor plumbing: accelerometer at ~50 Hz (g-force → m/s², gravity included —
+  the detector estimates gravity itself), gyro merged per-sample, GPS at 1 Hz
+  with speed/heading feeding `DetectionPipeline` incrementally.
+- `metro.config.js` — resolver fallback so Metro can consume workspace TS that
+  uses NodeNext `./file.js` imports.
 
-```bash
-# From repo root — initialise the bare RN app in place, then wire packages:
-npx @react-native-community/cli init PotholeProof --directory apps/mobile
-# add: @rnmapbox/maps, react-native-background-geolocation,
-#      react-native-fast-tflite, @op-engineering/op-sqlite, zustand,
-#      @tanstack/react-query, @potholeproof/shared-types (workspace:*)
-```
+## Limits of the pilot (by design)
 
-**Phase 1** delivers this app with a heuristic detector (no ML yet) + the
-review-&-submit screen that doubles as the labeling tool.
+- **Foreground only** — screen stays on, like a nav app (that's Phase 1's
+  dash-mount mode). The production app moves sensing into a native
+  TurboModule with background operation per `docs/ARCHITECTURE.md`.
+- Expo Go sensor cadence (~50 Hz requested) is enough for testing and data
+  collection, below the 100 Hz production target.

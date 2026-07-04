@@ -7,7 +7,32 @@ Newest entry first.
 
 ---
 
-## Cycle 14 — Sat Jul 4 ~12:50 (user-directed) · Public dashboard
+## Cycle 15 — Sat Jul 4 ~13:10 (user-directed) · Phase-1 pilot phone app
+
+User: put it on my phone + start training. Built the Expo pilot app.
+
+- **`apps/mobile`** — Expo SDK 57 app (runs in Expo Go, iPhone + Android, no
+  native build): drive screen (speed, sensor Hz, live jolt count + vibration),
+  accelerometer ~50 Hz (g→m/s²) merged with gyro per-sample, GPS 1 Hz with
+  speed/heading, all feeding the real `DetectionPipeline` incrementally;
+  review screen labels ✓/✗ per detection (AsyncStorage persistence) and
+  exports labeled JSON via the share sheet — the ML training data path.
+- `metro.config.js` — resolver fallback so Metro consumes workspace TS using
+  NodeNext `./file.js` imports (tries as-is, retries stripped).
+- Verified SDK-57 APIs against the versioned Expo docs before coding
+  (accelerometer = g-force incl. gravity; location speed/heading present).
+
+**Build sagas resolved:**
+- `expo install` spawns `pnpm` (not on PATH) → resolved versions from
+  `expo/bundledNativeModules.json` instead.
+- Tried `node-linker=hoisted` for Metro → broke Next.js (dup/mismatched React,
+  useContext-null in `_error` prerender even after forcing one React). Metro
+  handles pnpm's default symlinked layout fine, so reverted the hoist —
+  both builds green on the stock layout.
+
+**Verification:** mobile typecheck clean; `expo export` produced the Hermes
+bundle (detector included, 1.5 MB) on the default layout; dashboard
+`next build` green; **87/87 tests pass**.
 
 Built the last verifiable Phase-4 piece: the Next.js scorecard site.
 
