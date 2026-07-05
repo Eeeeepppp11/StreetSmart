@@ -7,7 +7,127 @@ Newest entry first.
 
 ---
 
-## Cycle 8 — Fri Jul 3 ~21:17 (autonomous, until 10 PM) · Hazard tiles
+## Cycle 15 — Sat Jul 4 ~13:10 (user-directed) · Phase-1 pilot phone app
+
+User: put it on my phone + start training. Built the Expo pilot app.
+
+- **`apps/mobile`** — Expo SDK 57 app (runs in Expo Go, iPhone + Android, no
+  native build): drive screen (speed, sensor Hz, live jolt count + vibration),
+  accelerometer ~50 Hz (g→m/s²) merged with gyro per-sample, GPS 1 Hz with
+  speed/heading, all feeding the real `DetectionPipeline` incrementally;
+  review screen labels ✓/✗ per detection (AsyncStorage persistence) and
+  exports labeled JSON via the share sheet — the ML training data path.
+- `metro.config.js` — resolver fallback so Metro consumes workspace TS using
+  NodeNext `./file.js` imports (tries as-is, retries stripped).
+- Verified SDK-57 APIs against the versioned Expo docs before coding
+  (accelerometer = g-force incl. gravity; location speed/heading present).
+
+**Build sagas resolved:**
+- `expo install` spawns `pnpm` (not on PATH) → resolved versions from
+  `expo/bundledNativeModules.json` instead.
+- Tried `node-linker=hoisted` for Metro → broke Next.js (dup/mismatched React,
+  useContext-null in `_error` prerender even after forcing one React). Metro
+  handles pnpm's default symlinked layout fine, so reverted the hoist —
+  both builds green on the stock layout.
+
+**Verification:** mobile typecheck clean; `expo export` produced the Hermes
+bundle (detector included, 1.5 MB) on the default layout; dashboard
+`next build` green; **87/87 tests pass**.
+
+Built the last verifiable Phase-4 piece: the Next.js scorecard site.
+
+- **`apps/dashboard`** — App Router, server-rendered, no client JS. The page
+  calls `buildScorecard` + `buildRouteRiskExport` from
+  `@potholeproof/analytics` over a labelled demo dataset shaped like real
+  engine output. Static prerender means the aggregation engine executes at
+  build time — `next build` is a real end-to-end check.
+- `services/analytics` package.json now points at compiled `dist` (runtime
+  consumer exists); `.gitignore` covers `.next/`.
+
+**Verification:** `next build` clean (Next 15.5, 4 static pages, types
+validated); prerendered HTML confirmed to contain the district tables;
+**87/87 tests still pass**.
+
+Phase-4 status: scorecards, privacy, municipal + route-risk exports, dashboard
+— all built. Remaining across the project: live HTTP layers, the RN mobile
+app, ML training rig (all need external tooling/services).
+
+User: "go" — built the insurer/fleet data product.
+
+- **`services/analytics/routerisk.ts`** — `buildRouteRiskExport`: per-cell risk
+  score = severity × confidence × half-life recency decay (30-day default),
+  saturated to 0..1; open/severe counts; only open hazards count. Same privacy
+  contract as the municipal export: under-k cells suppressed, no contributor
+  ids, no fine coordinates.
+
+**Verification:** **87/87 tests pass** (+5). Pushed to `phase-3-civic` → PR #3.
+
+Phase-4 remaining: the public dashboard app (Next.js) and the HTTP layers.
+
+---
+
+## Cycle 12 — Sat Jul 4 ~12:20 (user-directed) · Municipal data export
+
+User asked to start Phase 4 proper. (Note: machine slept ~01:10–12:15, so the
+overnight loop never fired; resumed on request.)
+
+- **`services/analytics/export.ts`** — `buildMunicipalExport`: the sellable
+  aggregated road-condition dataset. Per-coarse-cell open/fixed counts +
+  severity stats; k-anonymity enforced by **suppressing** under-k cells; rows
+  carry no contributor ids or fine coordinates. Uses `@potholeproof/privacy`.
+- Fixed `packages/privacy` package.json to point at compiled `dist` (it has
+  runtime code, unlike types-only packages).
+
+**Verification:** **82/82 tests pass** (+5 export). Pushed to `phase-3-civic`
+→ PR #3.
+
+Phase-4 remaining: insurer/fleet route-risk product, dashboard app (needs
+Next.js tooling), HTTP layers.
+
+User: "keep building" — two pieces this cycle, both on `phase-3-civic`.
+
+- **`services/analytics`** — `buildScorecard(reports, hazards, {districtOf,
+  asOf})`: per-district repair-time scorecards (counts, median/mean repair days,
+  oldest-open age). Deterministic (district mapper + "now" injected). Supporting
+  contract additions: `CivicReport.closedAt`, `reconcileReport(..., closedAt?)`
+  stamps closure time.
+- **`packages/privacy`** — `trimTraceEndpoints` (along-path endpoint trimming so
+  home/work never leaves the device; short trips vanish entirely) and
+  `meetsKAnonymity` (≥k distinct contributors gate for exports).
+
+One test-fixture fix along the way: the trim boundary test used a nominal
+m/degree constant vs the haversine's actual — rewrote to margin-based
+assertions (code was correct).
+
+**Verification:** all 10 packages typecheck; **77/77 tests pass** (+5 scorecard,
++5 privacy). Pushed to `phase-3-civic` → PR #3.
+
+User asked to keep going until 10 AM (read as Sat 10:00, the nearer boundary).
+Continued Phase 3 on `phase-3-civic`.
+
+- **`services/civic/reporting.ts`**:
+  - `hazardsToReport(hazards, existingReports, policy?)` — which hazards warrant
+    a new report (active + confident + severe + not already open-reported: dedup).
+  - `reconcileReport(report, hazard)` — **auto fix-verification**, the closed
+    loop: closes an open civic report once its hazard has self-healed (retired
+    via clean passes). Terminal reports untouched.
+
+**Verification:** typecheck clean; **67/67 tests pass** (+5). No regressions.
+
+Pushed to `phase-3-civic` → PR #3.
+
+After PR #2 merged, started Phase 3 (Report & Verify) on `phase-3-civic`.
+
+- **`services/civic`** — the pure, HTTP-free mapping core:
+  `hazardToOpen311Request` (HazardRecord → Open311 GeoReport v2 payload),
+  `normalizeOpen311Status` (provider status → our `CivicReportStatus`,
+  case-insensitive superset of Open311 + SeeClickFix), and `draftCivicReport`.
+  Targets SF311 (Open311) as the pilot.
+
+**Verification:** typecheck clean; **62/62 tests pass** (+4 civic). No regressions.
+
+Opened as a new PR off `main`. Next: the HTTP adapter (POST + status poll),
+batching/dedup, and auto fix-verification against the hazard engine.
 
 Reviewed the Phase-2 code (proximity + routing) — no bugs. Then built the piece
 that connects the backend to the warn feature.

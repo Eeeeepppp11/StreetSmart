@@ -15,7 +15,7 @@ Full design: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 ```
 apps/
   mobile/        React Native app — sensing, detection, map/nav, alerts, routing
-  dashboard/     Next.js public scorecard site (Phase 4)
+  dashboard/     Next.js public scorecard site (builds; demo data until live API)
 services/        NestJS backend (TypeScript)
   ingestion/     batched JoltEvent intake → queue (Phase 1: collect-only)
   hazard-engine/ confidence / self-heal engine + hazard tiles
@@ -28,6 +28,7 @@ packages/
   geo/           H3 spatial helpers + distance/bearing (h3-js)
   detector/      Phase-1 on-device detection core (pure TS, tested)
   proximity/     on-device "pothole ahead" proximity-alert engine
+  privacy/       trip-endpoint trimming + k-anonymity gates
 infra/           Postgres+PostGIS, Redis, event queue, warehouse (IaC)
 ```
 
