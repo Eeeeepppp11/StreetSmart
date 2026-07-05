@@ -7,7 +7,26 @@ Newest entry first.
 
 ---
 
-## Cycle 15 — Sat Jul 4 ~13:10 (user-directed) · Phase-1 pilot phone app
+## Cycle 16 — Sun Jul 5 (user-directed) · Live backend + phone upload
+
+User asked to make things live. Built the first running piece of the system
+on branch `live-backend`.
+
+- **`services/ingestion` server** — `node:http` + `node:sqlite` (zero runtime
+  deps): `POST /v1/uploads` (validated, labels sanitised, idempotent via
+  INSERT OR IGNORE), `GET /v1/health`, `GET /v1/training-data` (labeled set
+  for the ML rig). `main.ts` prints the phone-facing LAN URL.
+- **Contract** — `EventUpload.labels?: Record<eventId, TrainingLabel>`.
+- **`apps/mobile`** — "Upload to server" on the home screen: persisted server
+  URL + anonymous device id, builds the EventUpload from stored labels,
+  POSTs, reports new/duplicate counts. Local copy kept (server dedups).
+
+**Verification:** **92/92 tests pass** (+5 server, hitting a real HTTP server
+on an in-memory DB); mobile typecheck + `expo export` bundle clean; live curl
+smoke test of the compiled binary (health → upload → training-data) green.
+
+**User setup provided:** Expo Go steps, Vercel account for dashboard deploy,
+Python install deferred until training starts.
 
 User: put it on my phone + start training. Built the Expo pilot app.
 

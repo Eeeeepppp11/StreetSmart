@@ -18,5 +18,23 @@ to build the ML training set. No hazard map, no civic submission.
     lenient per collect-only intent (accepts valid events, reports bad ones
     per-index; rejects only malformed/oversize envelopes).
 
-Tested with `node --test` (7 cases). The HTTP/NestJS layer, auth, rate-limiting,
-and queue publish are still to come.
+- `server.ts` + `main.ts` — the **running collect-only server**: plain
+  `node:http` + `node:sqlite` (zero runtime dependencies).
+  - `POST /v1/uploads` — validated batch upload; labels sanitised; idempotent
+    (`INSERT OR IGNORE` on event id, so re-uploads are safe).
+  - `GET /v1/health` — event/labeled counts.
+  - `GET /v1/training-data` — the labeled set, ready for the `ml/` rig.
+
+## Run it
+
+```bash
+# from repo root, after building:
+node node_modules/typescript/bin/tsc -p services/ingestion/tsconfig.json
+node services/ingestion/dist/main.js     # PORT / PP_DB env to override
+```
+
+It prints the `http://<lan-ip>:4477` URL to paste into the phone app's
+"Upload to server" box (same Wi-Fi).
+
+Tested with `node --test` (12 cases) plus a live curl smoke test. Still to
+come for production: auth, rate limiting, queue publish, Postgres.

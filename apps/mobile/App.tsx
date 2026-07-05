@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
   Alert,
@@ -7,6 +7,7 @@ import {
   Share,
   StyleSheet,
   Text,
+  TextInput,
   Vibration,
   View,
 } from "react-native";
@@ -21,7 +22,10 @@ const G = 9.81; // expo-sensors accelerometer reports g-force incl. gravity
 const SENSOR_INTERVAL_MS = 20; // request ~50 Hz
 const DRAIN_INTERVAL_MS = 300;
 const STORAGE_KEY = "pp.labeled.v1";
+const SERVER_KEY = "pp.server.url";
+const ANON_KEY = "pp.anon.id";
 const MODEL_VERSION = "heuristic-v0-expo";
+const APP_VERSION = "0.1.0";
 
 type Label = "pothole" | "not_pothole";
 interface LabeledEvent {
@@ -39,6 +43,15 @@ export default function App() {
   const [sampleHz, setSampleHz] = useState(0);
   const [gpsOk, setGpsOk] = useState(false);
   const [savedCount, setSavedCount] = useState<number | null>(null);
+  const [serverUrl, setServerUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(SERVER_KEY).then((v) => v && setServerUrl(v));
+    AsyncStorage.getItem(STORAGE_KEY).then(
+      (raw) => raw && setSavedCount((JSON.parse(raw) as unknown[]).length)
+    );
+  }, []);
 
   const pipeline = useRef<DetectionPipeline | null>(null);
   const buffer = useRef<SensorSample[]>([]);
@@ -160,6 +173,69 @@ export default function App() {
     await Share.share({ message: raw, title: "PotholeProof training data" });
   }
 
+  async function uploadToServer() {
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    if (!raw || raw === "[]") {
+      Alert.alert("Nothing yet", "Label some drives first.");
+      return;
+    }
+    const base = serverUrl.trim().replace(/\/+$/, "");
+    if (!/^https?:\/\//.test(base)) {
+      Alert.alert(
+        "Server URL needed",
+        "Enter the upload URL the server prints, e.g. http://192.168.1.20:4477"
+      );
+      return;
+    }
+    await AsyncStorage.setItem(SERVER_KEY, base);
+
+    let anonId = await AsyncStorage.getItem(ANON_KEY);
+    if (!anonId) {
+      anonId = `anon-${Math.random().toString(36).slice(2, 10)}`;
+      await AsyncStorage.setItem(ANON_KEY, anonId);
+    }
+
+    const stored: LabeledEvent[] = JSON.parse(raw);
+    const byId = new Map(stored.map((l) => [l.event.id, l]));
+    const events = [...byId.values()].map((l) => l.event);
+    const labels = Object.fromEntries(
+      [...byId.values()].map((l) => [l.event.id, l.label])
+    );
+
+    setUploading(true);
+    try {
+      const res = await fetch(`${base}/v1/uploads`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          anonDeviceId: anonId,
+          appVersion: APP_VERSION,
+          sentAt: new Date().toISOString(),
+          events,
+          labels,
+        }),
+      });
+      const body = (await res.json()) as {
+        ok: boolean;
+        stored?: number;
+        duplicates?: number;
+      };
+      if (!res.ok || !body.ok) throw new Error(`server said ${res.status}`);
+      Alert.alert(
+        "Uploaded",
+        `${body.stored ?? 0} new, ${body.duplicates ?? 0} already on server. ` +
+          "Local copy kept — safe to re-upload anytime."
+      );
+    } catch (err) {
+      Alert.alert(
+        "Upload failed",
+        `${String(err)}\n\nIs the server running and the phone on the same Wi-Fi?`
+      );
+    } finally {
+      setUploading(false);
+    }
+  }
+
   if (phase === "review") {
     const pending = events.filter((e) => !labels[e.id]).length;
     return (
@@ -264,6 +340,25 @@ export default function App() {
       <Pressable style={styles.secondaryBtn} onPress={exportTrainingData}>
         <Text style={styles.secondaryBtnText}>Export training data</Text>
       </Pressable>
+      <TextInput
+        style={styles.urlInput}
+        placeholder="server URL, e.g. http://192.168.1.20:4477"
+        placeholderTextColor="#9aa3ad"
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="url"
+        value={serverUrl}
+        onChangeText={setServerUrl}
+      />
+      <Pressable
+        style={styles.secondaryBtn}
+        onPress={uploadToServer}
+        disabled={uploading}
+      >
+        <Text style={styles.secondaryBtnText}>
+          {uploading ? "Uploading…" : "Upload to server"}
+        </Text>
+      </Pressable>
       <Text style={styles.footer}>
         detector {MODEL_VERSION} · every commute is a road survey
       </Text>
@@ -301,6 +396,18 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: "#fff", fontSize: 18, fontWeight: "800" },
   secondaryBtn: { marginTop: 16, padding: 12 },
   secondaryBtnText: { color: "#e8442e", fontSize: 15, fontWeight: "600" },
+  urlInput: {
+    alignSelf: "stretch",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#d5dae0",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 20,
+    fontSize: 14,
+    color: "#1a1d21",
+  },
   footer: { position: "absolute", bottom: 28, color: "#8a939d", fontSize: 12 },
   driveSpeed: { fontSize: 96, fontWeight: "200", color: "#fff" },
   driveSpeedUnit: { fontSize: 24, color: "#8a939d" },

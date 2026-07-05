@@ -20,7 +20,10 @@ Android from any dev machine.
 4. Tap **START DRIVE**, mount the phone, drive. Jolts vibrate + log live.
 5. Tap **END DRIVE** → label each detection ✓ Pothole / ✗ Not → **Save**.
 6. On the home screen, **Export training data** shares the labeled events as
-   JSON — feed that to the `ml/` training rig.
+   JSON — or better, **Upload to server**: start the ingestion server on the
+   dev machine (`services/ingestion`, prints its `http://<lan-ip>:4477` URL),
+   paste that URL into the app's server box, and tap Upload. Idempotent —
+   re-uploading is always safe.
 
 ## What's inside
 
