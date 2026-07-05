@@ -7,7 +7,19 @@ Newest entry first.
 
 ---
 
-## Cycle 16 — Sun Jul 5 (user-directed) · Live backend + phone upload
+## Cycle 17 — Sun Jul 5 (user-directed) · Expo SDK 57 → 54 downgrade
+
+User's phone (via a fresh-machine setup) timed out in Expo Go; their Go build
+supports SDK 54, so downgraded the app on `live-backend`.
+
+- `expo@54.0.35`, aligned via `expo install --fix`: RN 0.81.5, react 19.1.0,
+  expo-sensors ~15.0.8, expo-location ~19.0.8, expo-status-bar ~3.0.9,
+  @types/react ~19.1.17, TS ~5.9.3. App code unchanged (APIs identical).
+- Also installed pnpm globally (user-level) on this machine — `pnpm` +
+  `expo install` now work directly; the corepack workaround is obsolete.
+
+**Verification:** mobile typecheck clean; `expo export` bundle clean on 54;
+92/92 tests unaffected.
 
 User asked to make things live. Built the first running piece of the system
 on branch `live-backend`.
