@@ -5,8 +5,9 @@ The dash-mount test app: reads accelerometer + gyroscope + GPS, runs the
 phone, logs every jolt, and provides the ✓/✗ **review screen whose labels
 become the ML training set**.
 
-Runs in **Expo Go** (SDK 57) — no native build needed, works on iPhone and
-Android from any dev machine.
+Runs in **Expo Go** (SDK **54** — pinned to match the pilot phone's Expo Go;
+bump with `expo install --fix` when the fleet updates) — no native build
+needed, works on iPhone and Android from any dev machine.
 
 ## Run it on your phone
 
@@ -20,7 +21,10 @@ Android from any dev machine.
 4. Tap **START DRIVE**, mount the phone, drive. Jolts vibrate + log live.
 5. Tap **END DRIVE** → label each detection ✓ Pothole / ✗ Not → **Save**.
 6. On the home screen, **Export training data** shares the labeled events as
-   JSON — feed that to the `ml/` training rig.
+   JSON — or better, **Upload to server**: start the ingestion server on the
+   dev machine (`services/ingestion`, prints its `http://<lan-ip>:4477` URL),
+   paste that URL into the app's server box, and tap Upload. Idempotent —
+   re-uploading is always safe.
 
 ## What's inside
 

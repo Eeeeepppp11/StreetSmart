@@ -13,4 +13,11 @@ export interface EventUpload {
   /** Client-side batch creation time. */
   sentAt: ISODateString;
   events: JoltEvent[];
+  /**
+   * Optional user labels from the Phase-1 review screen, keyed by event id —
+   * the raw material of the ML training set.
+   */
+  labels?: Record<string, TrainingLabel>;
 }
+
+export type TrainingLabel = "pothole" | "not_pothole";
