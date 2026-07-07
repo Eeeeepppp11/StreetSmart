@@ -15,6 +15,7 @@ import MapView, { Marker } from "react-native-maps";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { Accelerometer, Gyroscope } from "expo-sensors";
+import * as Speech from "expo-speech";
 import { DetectionPipeline, makeSamples } from "@potholeproof/detector";
 import type { GpsFix } from "@potholeproof/detector";
 import type { JoltEvent, SensorSample, Vec3 } from "@potholeproof/shared-types";
@@ -87,8 +88,11 @@ export default function App() {
   const [serverUrl, setServerUrl] = useState("");
   const [uploading, setUploading] = useState(false);
   const [library, setLibrary] = useState<LabeledEvent[]>([]);
+  const [pendingConfirm, setPendingConfirm] = useState<JoltEvent | null>(null);
 
   const pipeline = useRef<DetectionPipeline | null>(null);
+  const liveLabels = useRef<Record<string, Label>>({});
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const buffer = useRef<SensorSample[]>([]);
   const lastGyro = useRef<Vec3>({ x: 0, y: 0, z: 0 });
   const seq = useRef(0);
@@ -115,9 +119,37 @@ export default function App() {
       modelVersion: MODEL_VERSION,
     });
     buffer.current = [];
+    liveLabels.current = {};
     setEvents([]);
     setLabels({});
     setSampleHz(0);
+    setPendingConfirm(null);
+  }
+
+  /** Speak the detection and open a 6 s tap-anywhere confirm window. */
+  function announce(found: JoltEvent[]) {
+    const latest = found[found.length - 1]!;
+    const what =
+      latest.classification === "pothole"
+        ? "Pothole?"
+        : latest.classification === "speed_bump"
+          ? "Speed bump?"
+          : "Rough road?";
+    Speech.stop();
+    Speech.speak(`${what} Tap to confirm pothole.`, { rate: 1.05 });
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    setPendingConfirm(latest);
+    confirmTimer.current = setTimeout(() => setPendingConfirm(null), 6000);
+  }
+
+  function confirmPothole() {
+    if (!pendingConfirm) return;
+    liveLabels.current[pendingConfirm.id] = "pothole";
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    setPendingConfirm(null);
+    Speech.stop();
+    Speech.speak("Confirmed.");
+    Vibration.vibrate(60);
   }
 
   async function startDrive() {
@@ -179,6 +211,7 @@ export default function App() {
       if (found.length > 0) {
         Vibration.vibrate(150);
         setEvents((prev) => [...prev, ...found]);
+        announce(found);
       }
     }, DRAIN_INTERVAL_MS);
 
@@ -220,6 +253,7 @@ export default function App() {
       if (found.length > 0) {
         Vibration.vibrate(150);
         setEvents((prev) => [...prev, ...found]);
+        announce(found);
       }
       if (d.cursor >= d.samples.length) stopDrive();
     }, DRAIN_INTERVAL_MS);
@@ -236,6 +270,12 @@ export default function App() {
     if (tail.length > 0) setEvents((prev) => [...prev, ...tail]);
     pipeline.current = null;
     demo.current = null;
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    confirmTimer.current = null;
+    setPendingConfirm(null);
+    Speech.stop();
+    // Voice-confirmed labels pre-fill the review screen.
+    setLabels({ ...liveLabels.current });
     setSpeedMps(0);
     setPhase("review");
   }
@@ -542,6 +582,15 @@ export default function App() {
             ? "Replaying a synthetic road through the real detector."
             : "Mount the phone, keep the app open, and drive normally."}
         </Text>
+        {pendingConfirm && (
+          <Pressable style={styles.confirmOverlay} onPress={confirmPothole}>
+            <Text style={styles.confirmBig}>TAP = POTHOLE</Text>
+            <Text style={styles.confirmSub}>
+              {pendingConfirm.classification.replace("_", " ")} detected ·
+              ignore to decide later
+            </Text>
+          </Pressable>
+        )}
       </View>
     );
   }
@@ -636,6 +685,19 @@ const styles = StyleSheet.create({
   dangerText: { color: "#d92616", fontSize: 15, fontWeight: "700" },
   trashBtn: { padding: 6, marginLeft: 8 },
   trashText: { fontSize: 18 },
+  confirmOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(232,68,46,0.93)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+  },
+  confirmBig: { color: "#fff", fontSize: 44, fontWeight: "900" },
+  confirmSub: { color: "#fff", opacity: 0.9, marginTop: 10, fontSize: 15 },
   urlInput: {
     alignSelf: "stretch",
     backgroundColor: "#fff",
