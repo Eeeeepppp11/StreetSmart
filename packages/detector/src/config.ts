@@ -17,6 +17,11 @@ export interface DetectorConfig {
   /** Speed is clamped into [min, max] before normalising (avoids divide-by-zero). */
   minSpeedMps: number;
   maxSpeedMps: number;
+  /**
+   * No events are emitted below this speed, m/s. You can't hit a pothole while
+   * parked — this rejects hand-shaking, door slams, and parking-lot fiddling.
+   */
+  minEmitSpeedMps: number;
 
   /** Speed-normalised peak-to-peak (m/s^2) required to call a pothole. */
   potholePeak: number;
@@ -53,6 +58,7 @@ export const DEFAULT_CONFIG: DetectorConfig = {
   refSpeedMps: 13.4,
   minSpeedMps: 5,
   maxSpeedMps: 35,
+  minEmitSpeedMps: 4.5, // ~10 mph
 
   potholePeak: 6,
   bumpPeak: 3,
