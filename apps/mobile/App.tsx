@@ -11,7 +11,7 @@ import {
   Vibration,
   View,
 } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import { WebView } from "react-native-webview";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { Accelerometer, Gyroscope } from "expo-sensors";
@@ -44,6 +44,42 @@ function pinColor(e: JoltEvent): string {
   }
   if (e.classification === "speed_bump") return "#4a72da";
   return "#8a939d";
+}
+
+/**
+ * Leaflet + OpenStreetMap in a WebView — works inside Expo Go (react-native-maps
+ * needs native code Expo Go no longer ships). Free tiles, no API keys.
+ */
+function EventMap({ events }: { events: JoltEvent[] }) {
+  const lats = events.map((e) => e.location.lat);
+  const lngs = events.map((e) => e.location.lng);
+  const pad = 0.002;
+  const bounds = `[[${Math.min(...lats) - pad},${Math.min(...lngs) - pad}],[${Math.max(...lats) + pad},${Math.max(...lngs) + pad}]]`;
+  const markers = events
+    .map((e) => {
+      const label = `${e.classification.replace("_", " ")} · ${Math.round(e.severity * 100)}% severity`;
+      return `L.circleMarker([${e.location.lat},${e.location.lng}],{radius:9,color:'#fff',weight:2,fillColor:'${pinColor(e)}',fillOpacity:1}).addTo(m).bindPopup(${JSON.stringify(label)});`;
+    })
+    .join("");
+  const html = `<!DOCTYPE html><html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>html,body,#map{margin:0;padding:0;height:100%;background:#e8ecef}</style>
+</head><body><div id="map"></div><script>
+var m=L.map('map',{zoomControl:false,attributionControl:false});
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(m);
+${markers}
+m.fitBounds(${bounds},{maxZoom:16});
+</script></body></html>`;
+  return (
+    <WebView
+      style={styles.map}
+      source={{ html }}
+      originWhitelist={["*"]}
+      scrollEnabled={false}
+    />
+  );
 }
 
 /** A ~35s simulated drive: real detector, synthetic road. */
@@ -410,17 +446,6 @@ export default function App() {
 
   if (phase === "review") {
     const pending = events.filter((e) => !labels[e.id]).length;
-    const lats = events.map((e) => e.location.lat);
-    const lngs = events.map((e) => e.location.lng);
-    const region =
-      events.length > 0
-        ? {
-            latitude: (Math.min(...lats) + Math.max(...lats)) / 2,
-            longitude: (Math.min(...lngs) + Math.max(...lngs)) / 2,
-            latitudeDelta: Math.max(0.004, (Math.max(...lats) - Math.min(...lats)) * 1.6),
-            longitudeDelta: Math.max(0.004, (Math.max(...lngs) - Math.min(...lngs)) * 1.6),
-          }
-        : null;
 
     return (
       <View style={styles.screen}>
@@ -434,19 +459,7 @@ export default function App() {
             ? " · simulated — nothing will be saved"
             : " · confirm each one to build training data"}
         </Text>
-        {region && (
-          <MapView style={styles.map} initialRegion={region}>
-            {events.map((e) => (
-              <Marker
-                key={e.id}
-                coordinate={{ latitude: e.location.lat, longitude: e.location.lng }}
-                pinColor={pinColor(e)}
-                title={e.classification.replace("_", " ")}
-                description={`severity ${Math.round(e.severity * 100)}% · confidence ${Math.round(e.confidence * 100)}%`}
-              />
-            ))}
-          </MapView>
-        )}
+        {events.length > 0 && <EventMap events={events} />}
         <FlatList
           style={{ flex: 1, alignSelf: "stretch" }}
           data={events}
