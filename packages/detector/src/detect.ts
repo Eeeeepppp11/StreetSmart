@@ -90,6 +90,7 @@ export function emitForPeak(
 
   const fix = nearestFix(gps, peakT);
   if (!fix) return null;
+  if (fix.speedMps < config.minEmitSpeedMps) return null; // parked/hand-held
   const res = classify(extractFeatures(window), fix.speedMps, config);
   if (res.classification === "other" || res.confidence < config.minConfidence) {
     return null;

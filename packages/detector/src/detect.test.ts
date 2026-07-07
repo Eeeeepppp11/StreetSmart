@@ -62,3 +62,11 @@ test("no GPS → no events (cannot localise a hazard)", () => {
   const samples = drive(900, [{ atMs: 450, peak: 10, kind: "sharp" }]);
   assert.equal(runDetection(samples, [], makeDeps()).length, 0);
 });
+
+test("stationary shaking → no events (below minEmitSpeed)", () => {
+  const samples = drive(900, [{ atMs: 450, peak: 12, kind: "sharp" }]);
+  const parked = runDetection(samples, gpsTrack([0, 450, 900], 0), makeDeps());
+  assert.equal(parked.length, 0);
+  const crawling = runDetection(samples, gpsTrack([0, 450, 900], 2), makeDeps());
+  assert.equal(crawling.length, 0);
+});
