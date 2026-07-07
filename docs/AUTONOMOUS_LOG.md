@@ -7,7 +7,22 @@ Newest entry first.
 
 ---
 
-## Cycle 17 — Sun Jul 5 (user-directed) · Expo SDK 57 → 54 downgrade
+## Cycle 18 — Mon Jul 6 (user-directed) · Demo frontend + map
+
+User asked for frontend help + a demo-recording plan (branch `demo-frontend`).
+
+- **Review-screen map** — react-native-maps 1.27.2 (bundled in Expo Go, no
+  tokens): detections as severity-colored pins (severe red / moderate orange /
+  minor yellow; speed bumps blue), tap for severity/confidence.
+- **Demo Drive mode** — "▶ Demo drive (simulated)": a ~35 s synthetic road
+  (via the detector's own `makeSamples`) replayed through the REAL
+  `DetectionPipeline` in real time — 3 potholes + 1 speed bump, vibration,
+  auto-ends on the map review. Badged SIMULATED; demo events are never saved
+  to training data (guard in `saveLabels`).
+- Home/review polish (colored dots, badges); `docs/DEMO.md` — the recording
+  playbook (screen-record + 75-second script + editing notes).
+
+**Verification:** mobile typecheck clean; `expo export` bundle clean (SDK 54).
 
 User's phone (via a fresh-machine setup) timed out in Expo Go; their Go build
 supports SDK 54, so downgraded the app on `live-backend`.

@@ -11,10 +11,11 @@ import {
   Vibration,
   View,
 } from "react-native";
+import MapView, { Marker } from "react-native-maps";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { Accelerometer, Gyroscope } from "expo-sensors";
-import { DetectionPipeline } from "@potholeproof/detector";
+import { DetectionPipeline, makeSamples } from "@potholeproof/detector";
 import type { GpsFix } from "@potholeproof/detector";
 import type { JoltEvent, SensorSample, Vec3 } from "@potholeproof/shared-types";
 
@@ -25,7 +26,7 @@ const STORAGE_KEY = "pp.labeled.v1";
 const SERVER_KEY = "pp.server.url";
 const ANON_KEY = "pp.anon.id";
 const MODEL_VERSION = "heuristic-v0-expo";
-const APP_VERSION = "0.1.0";
+const APP_VERSION = "0.2.0";
 
 type Label = "pothole" | "not_pothole";
 interface LabeledEvent {
@@ -35,8 +36,48 @@ interface LabeledEvent {
 
 type Phase = "idle" | "driving" | "review";
 
+/** Marker colour: potholes by severity, impostors muted. */
+function pinColor(e: JoltEvent): string {
+  if (e.classification === "pothole") {
+    return e.severity >= 0.67 ? "#d92616" : e.severity >= 0.34 ? "#e8812e" : "#e6b91e";
+  }
+  if (e.classification === "speed_bump") return "#4a72da";
+  return "#8a939d";
+}
+
+/** A ~35s simulated drive: real detector, synthetic road. */
+function buildDemoDrive(): { samples: SensorSample[]; gps: GpsFix[] } {
+  const samples = makeSamples({
+    durationMs: 35000,
+    rateHz: 50,
+    noise: 0.35,
+    gyroNoise: 0.03,
+    seed: 7,
+    impulses: [
+      { atMs: 6000, peak: 11, kind: "sharp" }, // pothole
+      { atMs: 13000, peak: 7, kind: "rounded", gyroPeak: 1.2 }, // speed bump
+      { atMs: 20000, peak: 8.5, kind: "sharp" }, // moderate pothole
+      { atMs: 29000, peak: 14, kind: "sharp" }, // severe pothole
+    ],
+  });
+  const base = { lat: 37.7749, lng: -122.4194 };
+  const speed = 13.4; // ~30 mph northbound
+  const gps: GpsFix[] = [];
+  for (let t = 0; t <= 35000; t += 1000) {
+    gps.push({
+      t,
+      capturedAt: new Date(1_760_000_000_000 + t).toISOString(),
+      location: { lat: base.lat + (speed * (t / 1000)) / 111320, lng: base.lng },
+      speedMps: speed,
+      heading: 0,
+    });
+  }
+  return { samples, gps };
+}
+
 export default function App() {
   const [phase, setPhase] = useState<Phase>("idle");
+  const [isDemo, setIsDemo] = useState(false);
   const [events, setEvents] = useState<JoltEvent[]>([]);
   const [labels, setLabels] = useState<Record<string, Label>>({});
   const [speedMps, setSpeedMps] = useState(0);
@@ -46,6 +87,20 @@ export default function App() {
   const [serverUrl, setServerUrl] = useState("");
   const [uploading, setUploading] = useState(false);
 
+  const pipeline = useRef<DetectionPipeline | null>(null);
+  const buffer = useRef<SensorSample[]>([]);
+  const lastGyro = useRef<Vec3>({ x: 0, y: 0, z: 0 });
+  const seq = useRef(0);
+  const subs = useRef<{ remove: () => void }[]>([]);
+  const drainTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const demo = useRef<{
+    samples: SensorSample[];
+    gps: GpsFix[];
+    cursor: number;
+    gpsCursor: number;
+    clockMs: number;
+  } | null>(null);
+
   useEffect(() => {
     AsyncStorage.getItem(SERVER_KEY).then((v) => v && setServerUrl(v));
     AsyncStorage.getItem(STORAGE_KEY).then(
@@ -53,12 +108,16 @@ export default function App() {
     );
   }, []);
 
-  const pipeline = useRef<DetectionPipeline | null>(null);
-  const buffer = useRef<SensorSample[]>([]);
-  const lastGyro = useRef<Vec3>({ x: 0, y: 0, z: 0 });
-  const seq = useRef(0);
-  const subs = useRef<{ remove: () => void }[]>([]);
-  const drainTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  function freshPipeline() {
+    pipeline.current = new DetectionPipeline({
+      nextId: () => `evt-${Date.now()}-${++seq.current}`,
+      modelVersion: MODEL_VERSION,
+    });
+    buffer.current = [];
+    setEvents([]);
+    setLabels({});
+    setSampleHz(0);
+  }
 
   async function startDrive() {
     const perm = await Location.requestForegroundPermissionsAsync();
@@ -69,16 +128,9 @@ export default function App() {
       );
       return;
     }
-
-    pipeline.current = new DetectionPipeline({
-      nextId: () => `evt-${Date.now()}-${++seq.current}`,
-      modelVersion: MODEL_VERSION,
-    });
-    buffer.current = [];
-    setEvents([]);
-    setLabels({});
+    freshPipeline();
+    setIsDemo(false);
     setGpsOk(false);
-    setSampleHz(0);
 
     Gyroscope.setUpdateInterval(SENSOR_INTERVAL_MS);
     Accelerometer.setUpdateInterval(SENSOR_INTERVAL_MS);
@@ -108,10 +160,7 @@ export default function App() {
           const fix: GpsFix = {
             t: loc.timestamp,
             capturedAt: new Date(loc.timestamp).toISOString(),
-            location: {
-              lat: loc.coords.latitude,
-              lng: loc.coords.longitude,
-            },
+            location: { lat: loc.coords.latitude, lng: loc.coords.longitude },
             speedMps: Math.max(0, loc.coords.speed ?? 0),
             ...(heading !== null && heading >= 0 ? { heading } : {}),
           };
@@ -135,6 +184,48 @@ export default function App() {
     setPhase("driving");
   }
 
+  /** Simulated drive through the REAL detection pipeline — for demos. */
+  function startDemoDrive() {
+    freshPipeline();
+    setIsDemo(true);
+    setGpsOk(true);
+    demo.current = { ...buildDemoDrive(), cursor: 0, gpsCursor: 0, clockMs: 0 };
+
+    drainTimer.current = setInterval(() => {
+      const d = demo.current;
+      if (!d || !pipeline.current) return;
+      d.clockMs += DRAIN_INTERVAL_MS;
+
+      while (
+        d.gpsCursor < d.gps.length &&
+        d.gps[d.gpsCursor]!.t <= d.clockMs
+      ) {
+        const fix = d.gps[d.gpsCursor]!;
+        pipeline.current.pushGps(fix);
+        setSpeedMps(fix.speedMps);
+        d.gpsCursor++;
+      }
+
+      const batch: SensorSample[] = [];
+      while (
+        d.cursor < d.samples.length &&
+        d.samples[d.cursor]!.t <= d.clockMs
+      ) {
+        batch.push(d.samples[d.cursor]!);
+        d.cursor++;
+      }
+      setSampleHz(Math.round((batch.length * 1000) / DRAIN_INTERVAL_MS));
+      const found = pipeline.current.push(batch);
+      if (found.length > 0) {
+        Vibration.vibrate(150);
+        setEvents((prev) => [...prev, ...found]);
+      }
+      if (d.cursor >= d.samples.length) stopDrive();
+    }, DRAIN_INTERVAL_MS);
+
+    setPhase("driving");
+  }
+
   function stopDrive() {
     if (drainTimer.current) clearInterval(drainTimer.current);
     drainTimer.current = null;
@@ -143,6 +234,8 @@ export default function App() {
     const tail = pipeline.current?.flush() ?? [];
     if (tail.length > 0) setEvents((prev) => [...prev, ...tail]);
     pipeline.current = null;
+    demo.current = null;
+    setSpeedMps(0);
     setPhase("review");
   }
 
@@ -151,6 +244,13 @@ export default function App() {
   }
 
   async function saveLabels() {
+    if (isDemo) {
+      // Demo detections are synthetic — never let them pollute training data.
+      setEvents([]);
+      setLabels({});
+      setPhase("idle");
+      return;
+    }
     const labeled: LabeledEvent[] = events
       .filter((e) => labels[e.id])
       .map((e) => ({ event: e, label: labels[e.id]! }));
@@ -197,8 +297,8 @@ export default function App() {
 
     const stored: LabeledEvent[] = JSON.parse(raw);
     const byId = new Map(stored.map((l) => [l.event.id, l]));
-    const events = [...byId.values()].map((l) => l.event);
-    const labels = Object.fromEntries(
+    const eventsToSend = [...byId.values()].map((l) => l.event);
+    const labelMap = Object.fromEntries(
       [...byId.values()].map((l) => [l.event.id, l.label])
     );
 
@@ -211,8 +311,8 @@ export default function App() {
           anonDeviceId: anonId,
           appVersion: APP_VERSION,
           sentAt: new Date().toISOString(),
-          events,
-          labels,
+          events: eventsToSend,
+          labels: labelMap,
         }),
       });
       const body = (await res.json()) as {
@@ -238,63 +338,93 @@ export default function App() {
 
   if (phase === "review") {
     const pending = events.filter((e) => !labels[e.id]).length;
+    const lats = events.map((e) => e.location.lat);
+    const lngs = events.map((e) => e.location.lng);
+    const region =
+      events.length > 0
+        ? {
+            latitude: (Math.min(...lats) + Math.max(...lats)) / 2,
+            longitude: (Math.min(...lngs) + Math.max(...lngs)) / 2,
+            latitudeDelta: Math.max(0.004, (Math.max(...lats) - Math.min(...lats)) * 1.6),
+            longitudeDelta: Math.max(0.004, (Math.max(...lngs) - Math.min(...lngs)) * 1.6),
+          }
+        : null;
+
     return (
       <View style={styles.screen}>
         <StatusBar style="dark" />
-        <Text style={styles.h1}>Review drive</Text>
-        <Text style={styles.sub}>
-          {events.length} detection{events.length === 1 ? "" : "s"} · confirm
-          each one to build training data
+        <Text style={styles.h1}>
+          {isDemo ? "Demo results" : "Review drive"}
         </Text>
+        <Text style={styles.sub}>
+          {events.length} detection{events.length === 1 ? "" : "s"}
+          {isDemo
+            ? " · simulated — nothing will be saved"
+            : " · confirm each one to build training data"}
+        </Text>
+        {region && (
+          <MapView style={styles.map} initialRegion={region}>
+            {events.map((e) => (
+              <Marker
+                key={e.id}
+                coordinate={{ latitude: e.location.lat, longitude: e.location.lng }}
+                pinColor={pinColor(e)}
+                title={e.classification.replace("_", " ")}
+                description={`severity ${Math.round(e.severity * 100)}% · confidence ${Math.round(e.confidence * 100)}%`}
+              />
+            ))}
+          </MapView>
+        )}
         <FlatList
           style={{ flex: 1, alignSelf: "stretch" }}
           data={events}
           keyExtractor={(e) => e.id}
           ListEmptyComponent={
-            <Text style={styles.sub}>
-              No jolts detected this drive. Smooth roads!
-            </Text>
+            <Text style={styles.sub}>No jolts detected this drive. Smooth roads!</Text>
           }
           renderItem={({ item }) => {
             const label = labels[item.id];
             return (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>
-                  {item.classification.replace("_", " ")} ·{" "}
-                  {Math.round(item.severity * 100)}% severity
-                </Text>
+                <View style={styles.cardRow}>
+                  <View style={[styles.dot, { backgroundColor: pinColor(item) }]} />
+                  <Text style={styles.cardTitle}>
+                    {item.classification.replace("_", " ")} ·{" "}
+                    {Math.round(item.severity * 100)}%
+                  </Text>
+                </View>
                 <Text style={styles.cardMeta}>
                   {new Date(item.capturedAt).toLocaleTimeString()} ·{" "}
                   {(item.speedMps * 2.237).toFixed(0)} mph ·{" "}
                   {Math.round(item.confidence * 100)}% confidence
                 </Text>
-                <View style={styles.row}>
-                  <Pressable
-                    onPress={() => setLabel(item.id, "pothole")}
-                    style={[
-                      styles.labelBtn,
-                      label === "pothole" && styles.labelYes,
-                    ]}
-                  >
-                    <Text style={styles.labelText}>✓ Pothole</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setLabel(item.id, "not_pothole")}
-                    style={[
-                      styles.labelBtn,
-                      label === "not_pothole" && styles.labelNo,
-                    ]}
-                  >
-                    <Text style={styles.labelText}>✗ Not</Text>
-                  </Pressable>
-                </View>
+                {!isDemo && (
+                  <View style={styles.row}>
+                    <Pressable
+                      onPress={() => setLabel(item.id, "pothole")}
+                      style={[styles.labelBtn, label === "pothole" && styles.labelYes]}
+                    >
+                      <Text style={styles.labelText}>✓ Pothole</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setLabel(item.id, "not_pothole")}
+                      style={[styles.labelBtn, label === "not_pothole" && styles.labelNo]}
+                    >
+                      <Text style={styles.labelText}>✗ Not</Text>
+                    </Pressable>
+                  </View>
+                )}
               </View>
             );
           }}
         />
         <Pressable style={styles.primaryBtn} onPress={saveLabels}>
           <Text style={styles.primaryBtnText}>
-            {pending > 0 ? `Save (${pending} unlabeled skipped)` : "Save labels"}
+            {isDemo
+              ? "Done"
+              : pending > 0
+                ? `Save (${pending} unlabeled skipped)`
+                : "Save labels"}
           </Text>
         </Pressable>
       </View>
@@ -305,6 +435,11 @@ export default function App() {
     return (
       <View style={[styles.screen, styles.driveScreen]}>
         <StatusBar style="light" />
+        {isDemo && (
+          <View style={styles.demoBadge}>
+            <Text style={styles.demoBadgeText}>SIMULATED DRIVE</Text>
+          </View>
+        )}
         <Text style={styles.driveSpeed}>
           {(speedMps * 2.237).toFixed(0)}
           <Text style={styles.driveSpeedUnit}> mph</Text>
@@ -313,12 +448,16 @@ export default function App() {
           sensors {sampleHz} Hz · GPS {gpsOk ? "✓" : "…"}
         </Text>
         <Text style={styles.driveCount}>{events.length}</Text>
-        <Text style={styles.driveStat}>jolts this drive</Text>
+        <Text style={styles.driveStat}>
+          jolt{events.length === 1 ? "" : "s"} detected
+        </Text>
         <Pressable style={styles.stopBtn} onPress={stopDrive}>
           <Text style={styles.primaryBtnText}>END DRIVE</Text>
         </Pressable>
         <Text style={styles.driveHint}>
-          Mount the phone, keep the app open, and drive normally.
+          {isDemo
+            ? "Replaying a synthetic road through the real detector."
+            : "Mount the phone, keep the app open, and drive normally."}
         </Text>
       </View>
     );
@@ -328,14 +467,15 @@ export default function App() {
     <View style={styles.screen}>
       <StatusBar style="dark" />
       <Text style={styles.h1}>PotholeProof</Text>
-      <Text style={styles.sub}>
-        Phase-1 pilot — detect, log, and label road damage as you drive.
-      </Text>
+      <Text style={styles.sub}>Every commute is a road survey.</Text>
       {savedCount !== null && (
-        <Text style={styles.sub}>💾 {savedCount} labeled events stored</Text>
+        <Text style={styles.statLine}>💾 {savedCount} labeled events stored</Text>
       )}
       <Pressable style={styles.primaryBtn} onPress={startDrive}>
         <Text style={styles.primaryBtnText}>START DRIVE</Text>
+      </Pressable>
+      <Pressable style={styles.demoBtn} onPress={startDemoDrive}>
+        <Text style={styles.demoBtnText}>▶ Demo drive (simulated)</Text>
       </Pressable>
       <Pressable style={styles.secondaryBtn} onPress={exportTrainingData}>
         <Text style={styles.secondaryBtnText}>Export training data</Text>
@@ -350,18 +490,12 @@ export default function App() {
         value={serverUrl}
         onChangeText={setServerUrl}
       />
-      <Pressable
-        style={styles.secondaryBtn}
-        onPress={uploadToServer}
-        disabled={uploading}
-      >
+      <Pressable style={styles.secondaryBtn} onPress={uploadToServer} disabled={uploading}>
         <Text style={styles.secondaryBtnText}>
           {uploading ? "Uploading…" : "Upload to server"}
         </Text>
       </Pressable>
-      <Text style={styles.footer}>
-        detector {MODEL_VERSION} · every commute is a road survey
-      </Text>
+      <Text style={styles.footer}>detector {MODEL_VERSION}</Text>
     </View>
   );
 }
@@ -384,6 +518,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 8,
   },
+  statLine: { fontSize: 14, color: "#2e9e4f", marginTop: 4 },
+  map: {
+    alignSelf: "stretch",
+    height: 220,
+    borderRadius: 12,
+    marginVertical: 10,
+  },
   primaryBtn: {
     backgroundColor: "#e8442e",
     paddingVertical: 18,
@@ -394,7 +535,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   primaryBtnText: { color: "#fff", fontSize: 18, fontWeight: "800" },
-  secondaryBtn: { marginTop: 16, padding: 12 },
+  demoBtn: {
+    borderWidth: 2,
+    borderColor: "#e8442e",
+    paddingVertical: 14,
+    borderRadius: 999,
+    marginTop: 12,
+    alignSelf: "stretch",
+    alignItems: "center",
+  },
+  demoBtnText: { color: "#e8442e", fontSize: 16, fontWeight: "700" },
+  secondaryBtn: { marginTop: 14, padding: 10 },
   secondaryBtnText: { color: "#e8442e", fontSize: 15, fontWeight: "600" },
   urlInput: {
     alignSelf: "stretch",
@@ -404,19 +555,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    marginTop: 20,
+    marginTop: 18,
     fontSize: 14,
     color: "#1a1d21",
   },
   footer: { position: "absolute", bottom: 28, color: "#8a939d", fontSize: 12 },
+  demoBadge: {
+    position: "absolute",
+    top: 64,
+    backgroundColor: "#e8812e",
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  demoBadgeText: { color: "#fff", fontWeight: "800", fontSize: 12, letterSpacing: 1 },
   driveSpeed: { fontSize: 96, fontWeight: "200", color: "#fff" },
   driveSpeedUnit: { fontSize: 24, color: "#8a939d" },
-  driveCount: {
-    fontSize: 64,
-    fontWeight: "800",
-    color: "#e8442e",
-    marginTop: 24,
-  },
+  driveCount: { fontSize: 64, fontWeight: "800", color: "#e8442e", marginTop: 24 },
   driveStat: { fontSize: 14, color: "#8a939d", marginTop: 4 },
   driveHint: {
     position: "absolute",
@@ -441,6 +596,8 @@ const styles = StyleSheet.create({
     marginVertical: 6,
     alignSelf: "stretch",
   },
+  cardRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  dot: { width: 10, height: 10, borderRadius: 5 },
   cardTitle: { fontSize: 16, fontWeight: "700", color: "#1a1d21" },
   cardMeta: { fontSize: 13, color: "#5b6570", marginTop: 2 },
   row: { flexDirection: "row", gap: 10, marginTop: 10 },

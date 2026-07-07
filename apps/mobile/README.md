@@ -29,7 +29,11 @@ needed, works on iPhone and Android from any dev machine.
 ## What's inside
 
 - `App.tsx` — the whole pilot: drive screen (speed, sensor Hz, live jolt
-  count), review/labeling screen, AsyncStorage persistence, JSON export.
+  count), review/labeling screen with a **severity-colored pothole map**
+  (react-native-maps, bundled in Expo Go), AsyncStorage persistence, JSON
+  export, server upload, and a **Demo Drive mode** — a synthetic road
+  replayed through the real detector for screen-recorded demos (badged
+  SIMULATED; never saved to training data). See `docs/DEMO.md`.
 - Sensor plumbing: accelerometer at ~50 Hz (g-force → m/s², gravity included —
   the detector estimates gravity itself), gyro merged per-sample, GPS at 1 Hz
   with speed/heading feeding `DetectionPipeline` incrementally.
