@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   Pressable,
+  ScrollView,
   Share,
   StyleSheet,
   Text,
@@ -596,41 +597,76 @@ export default function App() {
   }
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, styles.homeScreen]}>
       <StatusBar style="dark" />
-      <Text style={styles.h1}>PotholeProof</Text>
-      <Text style={styles.sub}>Every commute is a road survey.</Text>
-      {savedCount !== null && (
-        <Text style={styles.statLine}>💾 {savedCount} labeled events stored</Text>
-      )}
-      <Pressable style={styles.primaryBtn} onPress={startDrive}>
-        <Text style={styles.primaryBtnText}>START DRIVE</Text>
-      </Pressable>
-      <Pressable style={styles.demoBtn} onPress={startDemoDrive}>
-        <Text style={styles.demoBtnText}>▶ Demo drive (simulated)</Text>
-      </Pressable>
-      <Pressable style={styles.secondaryBtn} onPress={exportTrainingData}>
-        <Text style={styles.secondaryBtnText}>Export training data</Text>
-      </Pressable>
-      <Pressable style={styles.secondaryBtn} onPress={openLibrary}>
-        <Text style={styles.secondaryBtnText}>Manage saved data</Text>
-      </Pressable>
-      <TextInput
-        style={styles.urlInput}
-        placeholder="server URL, e.g. http://192.168.1.20:4477"
-        placeholderTextColor="#9aa3ad"
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="url"
-        value={serverUrl}
-        onChangeText={setServerUrl}
-      />
-      <Pressable style={styles.secondaryBtn} onPress={uploadToServer} disabled={uploading}>
-        <Text style={styles.secondaryBtnText}>
-          {uploading ? "Uploading…" : "Upload to server"}
-        </Text>
-      </Pressable>
-      <Text style={styles.footer}>detector {MODEL_VERSION}</Text>
+      <ScrollView
+        style={styles.homeScroll}
+        contentContainerStyle={styles.homeContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.homeHeader}>
+          <Text style={styles.homeTitle}>PotholeProof</Text>
+          <Text style={styles.homeTagline}>Every commute is a road survey.</Text>
+        </View>
+
+        <View style={styles.heroGroup}>
+          <Pressable style={styles.primaryBtn} onPress={startDrive}>
+            <Text style={styles.primaryBtnText}>START DRIVE</Text>
+          </Pressable>
+          <Pressable style={styles.demoBtn} onPress={startDemoDrive}>
+            <Text style={styles.demoBtnText}>▶ Demo drive (simulated)</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionLabel}>Your data</Text>
+          <View style={styles.statRow}>
+            <Text style={[styles.statValue, !savedCount && styles.statValueEmpty]}>
+              {savedCount ?? 0}
+            </Text>
+            <Text style={styles.statCaption}>
+              {savedCount
+                ? "labeled events stored on this phone"
+                : "No labeled events yet — drive to get started"}
+            </Text>
+          </View>
+          <View style={styles.divider} />
+          <Pressable style={styles.rowBtn} onPress={openLibrary}>
+            <Text style={styles.rowBtnText}>📂 Manage saved data</Text>
+            <Text style={styles.rowBtnChevron}>›</Text>
+          </Pressable>
+          <View style={styles.divider} />
+          <Pressable style={styles.rowBtn} onPress={exportTrainingData}>
+            <Text style={styles.rowBtnText}>⇪ Export training data</Text>
+            <Text style={styles.rowBtnChevron}>›</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionLabel}>Upload to server</Text>
+          <TextInput
+            style={styles.urlInput}
+            placeholder="server URL, e.g. http://192.168.1.20:4477"
+            placeholderTextColor="#9aa3ad"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            value={serverUrl}
+            onChangeText={setServerUrl}
+          />
+          <Pressable
+            style={[styles.uploadBtn, uploading && styles.uploadBtnDisabled]}
+            onPress={uploadToServer}
+            disabled={uploading}
+          >
+            <Text style={styles.uploadBtnText}>
+              {uploading ? "Uploading…" : "Upload to server"}
+            </Text>
+          </Pressable>
+        </View>
+
+        <Text style={styles.homeFooter}>detector {MODEL_VERSION}</Text>
+      </ScrollView>
     </View>
   );
 }
@@ -653,7 +689,55 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 8,
   },
-  statLine: { fontSize: 14, color: "#2e9e4f", marginTop: 4 },
+  homeScreen: { justifyContent: "flex-start", alignItems: "stretch", padding: 0 },
+  homeScroll: { flex: 1, alignSelf: "stretch" },
+  homeContent: { paddingHorizontal: 20, paddingTop: 48, paddingBottom: 40 },
+  homeHeader: { marginBottom: 20 },
+  homeTitle: { fontSize: 34, fontWeight: "800", color: "#1a1d21" },
+  homeTagline: { fontSize: 15, color: "#5b6570", marginTop: 4 },
+  heroGroup: { marginBottom: 24 },
+  sectionCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: "#1a1d21",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#8a939d",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    marginBottom: 12,
+  },
+  statRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  statValue: { fontSize: 26, fontWeight: "800", color: "#2e9e4f" },
+  statValueEmpty: { color: "#c3c9d0" },
+  statCaption: { flex: 1, fontSize: 13, color: "#5b6570" },
+  divider: { height: 1, backgroundColor: "#eef0f2", marginVertical: 4 },
+  rowBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+  },
+  rowBtnText: { fontSize: 15, fontWeight: "600", color: "#1a1d21" },
+  rowBtnChevron: { fontSize: 20, color: "#c3c9d0" },
+  uploadBtn: {
+    backgroundColor: "#e8442e",
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  uploadBtnDisabled: { opacity: 0.6 },
+  uploadBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  homeFooter: { textAlign: "center", color: "#8a939d", fontSize: 12, marginTop: 4 },
   map: {
     alignSelf: "stretch",
     height: 220,
@@ -700,17 +784,15 @@ const styles = StyleSheet.create({
   confirmSub: { color: "#fff", opacity: 0.9, marginTop: 10, fontSize: 15 },
   urlInput: {
     alignSelf: "stretch",
-    backgroundColor: "#fff",
+    backgroundColor: "#f6f7f9",
     borderWidth: 1,
-    borderColor: "#d5dae0",
+    borderColor: "#e3e6ea",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    marginTop: 18,
     fontSize: 14,
     color: "#1a1d21",
   },
-  footer: { position: "absolute", bottom: 28, color: "#8a939d", fontSize: 12 },
   demoBadge: {
     position: "absolute",
     top: 64,
