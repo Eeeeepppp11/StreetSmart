@@ -34,7 +34,7 @@ interface LabeledEvent {
   label: Label;
 }
 
-type Phase = "idle" | "driving" | "review";
+type Phase = "idle" | "driving" | "review" | "library";
 
 /** Marker colour: potholes by severity, impostors muted. */
 function pinColor(e: JoltEvent): string {
@@ -86,6 +86,7 @@ export default function App() {
   const [savedCount, setSavedCount] = useState<number | null>(null);
   const [serverUrl, setServerUrl] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [library, setLibrary] = useState<LabeledEvent[]>([]);
 
   const pipeline = useRef<DetectionPipeline | null>(null);
   const buffer = useRef<SensorSample[]>([]);
@@ -273,6 +274,37 @@ export default function App() {
     await Share.share({ message: raw, title: "PotholeProof training data" });
   }
 
+  async function openLibrary() {
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    setLibrary(raw ? (JSON.parse(raw) as LabeledEvent[]) : []);
+    setPhase("library");
+  }
+
+  async function persistLibrary(next: LabeledEvent[]) {
+    setLibrary(next);
+    setSavedCount(next.length);
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  }
+
+  function deleteSaved(id: string) {
+    void persistLibrary(library.filter((l) => l.event.id !== id));
+  }
+
+  function clearSaved() {
+    Alert.alert(
+      "Delete all saved data?",
+      "Removes every labeled event stored on this phone. (Anything already uploaded stays on the server.)",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete all",
+          style: "destructive",
+          onPress: () => void persistLibrary([]),
+        },
+      ]
+    );
+  }
+
   async function uploadToServer() {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (!raw || raw === "[]") {
@@ -431,6 +463,57 @@ export default function App() {
     );
   }
 
+  if (phase === "library") {
+    return (
+      <View style={styles.screen}>
+        <StatusBar style="dark" />
+        <Text style={styles.h1}>Saved data</Text>
+        <Text style={styles.sub}>
+          {library.length} labeled event{library.length === 1 ? "" : "s"} on
+          this phone
+        </Text>
+        <FlatList
+          style={{ flex: 1, alignSelf: "stretch" }}
+          data={library}
+          keyExtractor={(l) => l.event.id}
+          ListEmptyComponent={<Text style={styles.sub}>Nothing saved yet.</Text>}
+          renderItem={({ item }) => (
+            <View style={styles.card}>
+              <View style={styles.cardRow}>
+                <View
+                  style={[styles.dot, { backgroundColor: pinColor(item.event) }]}
+                />
+                <Text style={[styles.cardTitle, { flex: 1 }]}>
+                  {item.event.classification.replace("_", " ")} ·{" "}
+                  {Math.round(item.event.severity * 100)}%
+                </Text>
+                <Pressable
+                  onPress={() => deleteSaved(item.event.id)}
+                  style={styles.trashBtn}
+                  hitSlop={8}
+                >
+                  <Text style={styles.trashText}>🗑</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.cardMeta}>
+                {new Date(item.event.capturedAt).toLocaleString()} · you said:{" "}
+                {item.label === "pothole" ? "✓ pothole" : "✗ not a pothole"}
+              </Text>
+            </View>
+          )}
+        />
+        {library.length > 0 && (
+          <Pressable style={styles.secondaryBtn} onPress={clearSaved}>
+            <Text style={styles.dangerText}>Delete all</Text>
+          </Pressable>
+        )}
+        <Pressable style={styles.primaryBtn} onPress={() => setPhase("idle")}>
+          <Text style={styles.primaryBtnText}>Done</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   if (phase === "driving") {
     return (
       <View style={[styles.screen, styles.driveScreen]}>
@@ -479,6 +562,9 @@ export default function App() {
       </Pressable>
       <Pressable style={styles.secondaryBtn} onPress={exportTrainingData}>
         <Text style={styles.secondaryBtnText}>Export training data</Text>
+      </Pressable>
+      <Pressable style={styles.secondaryBtn} onPress={openLibrary}>
+        <Text style={styles.secondaryBtnText}>Manage saved data</Text>
       </Pressable>
       <TextInput
         style={styles.urlInput}
@@ -547,6 +633,9 @@ const styles = StyleSheet.create({
   demoBtnText: { color: "#e8442e", fontSize: 16, fontWeight: "700" },
   secondaryBtn: { marginTop: 14, padding: 10 },
   secondaryBtnText: { color: "#e8442e", fontSize: 15, fontWeight: "600" },
+  dangerText: { color: "#d92616", fontSize: 15, fontWeight: "700" },
+  trashBtn: { padding: 6, marginLeft: 8 },
+  trashText: { fontSize: 18 },
   urlInput: {
     alignSelf: "stretch",
     backgroundColor: "#fff",
