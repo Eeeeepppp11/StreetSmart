@@ -34,9 +34,50 @@ type Label = "pothole" | "not_pothole";
 interface LabeledEvent {
   event: JoltEvent;
   label: Label;
+  /** Groups events from the same drive so saved data can be reopened/edited together. Absent on data saved before this existed. */
+  driveId?: string;
 }
 
 type Phase = "idle" | "driving" | "review" | "library";
+
+/** Stable grouping key — falls back to the capture date for data saved before driveId existed. */
+function driveKeyOf(item: LabeledEvent): string {
+  return item.driveId ?? `legacy-${item.event.capturedAt.slice(0, 10)}`;
+}
+
+interface DriveGroup {
+  driveId: string;
+  items: LabeledEvent[];
+  latestAt: string;
+}
+
+function isLabeledEvent(x: unknown): x is LabeledEvent {
+  if (!x || typeof x !== "object") return false;
+  const o = x as Record<string, unknown>;
+  if (o.label !== "pothole" && o.label !== "not_pothole") return false;
+  const e = o.event as Record<string, unknown> | undefined;
+  return !!e && typeof e.id === "string" && typeof e.capturedAt === "string";
+}
+
+function groupLibraryByDrive(items: LabeledEvent[]): DriveGroup[] {
+  const byKey = new Map<string, LabeledEvent[]>();
+  for (const item of items) {
+    const key = driveKeyOf(item);
+    const group = byKey.get(key);
+    if (group) group.push(item);
+    else byKey.set(key, [item]);
+  }
+  return [...byKey.entries()]
+    .map(([driveId, groupItems]) => ({
+      driveId,
+      items: groupItems.sort((a, b) => a.event.capturedAt.localeCompare(b.event.capturedAt)),
+      latestAt: groupItems.reduce(
+        (max, i) => (i.event.capturedAt > max ? i.event.capturedAt : max),
+        groupItems[0]!.event.capturedAt
+      ),
+    }))
+    .sort((a, b) => b.latestAt.localeCompare(a.latestAt));
+}
 
 /** Marker colour: potholes by severity, impostors muted. */
 function pinColor(e: JoltEvent): string {
@@ -90,9 +131,13 @@ export default function App() {
   const [uploading, setUploading] = useState(false);
   const [library, setLibrary] = useState<LabeledEvent[]>([]);
   const [pendingConfirm, setPendingConfirm] = useState<JoltEvent | null>(null);
+  const [editingDriveId, setEditingDriveId] = useState<string | null>(null);
+  const [showImportBox, setShowImportBox] = useState(false);
+  const [importText, setImportText] = useState("");
 
   const pipeline = useRef<DetectionPipeline | null>(null);
   const liveLabels = useRef<Record<string, Label>>({});
+  const driveIdRef = useRef<string>("");
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const buffer = useRef<SensorSample[]>([]);
   const lastGyro = useRef<Vec3>({ x: 0, y: 0, z: 0 });
@@ -121,6 +166,8 @@ export default function App() {
     });
     buffer.current = [];
     liveLabels.current = {};
+    driveIdRef.current = `drive-${Date.now()}`;
+    setEditingDriveId(null);
     setEvents([]);
     setLabels({});
     setSampleHz(0);
@@ -295,7 +342,7 @@ export default function App() {
     }
     const labeled: LabeledEvent[] = events
       .filter((e) => labels[e.id])
-      .map((e) => ({ event: e, label: labels[e.id]! }));
+      .map((e) => ({ event: e, label: labels[e.id]!, driveId: driveIdRef.current }));
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     const existing: LabeledEvent[] = raw ? JSON.parse(raw) : [];
     const merged = [...existing, ...labeled];
@@ -315,6 +362,45 @@ export default function App() {
     await Share.share({ message: raw, title: "PotholeProof training data" });
   }
 
+  async function importTrainingData() {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(importText.trim());
+    } catch {
+      Alert.alert(
+        "Couldn't read that",
+        "Paste the exact JSON text produced by Export training data."
+      );
+      return;
+    }
+    const incoming = Array.isArray(parsed) ? parsed.filter(isLabeledEvent) : [];
+    if (incoming.length === 0) {
+      Alert.alert("Couldn't read that", "Expected a list of labeled events.");
+      return;
+    }
+
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const existing: LabeledEvent[] = raw ? JSON.parse(raw) : [];
+    const byId = new Map(existing.map((l) => [l.event.id, l]));
+    let added = 0;
+    for (const item of incoming) {
+      if (!byId.has(item.event.id)) added++;
+      byId.set(item.event.id, item);
+    }
+    const merged = [...byId.values()];
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    setSavedCount(merged.length);
+    setImportText("");
+    setShowImportBox(false);
+    Alert.alert(
+      "Imported",
+      `${added} new event${added === 1 ? "" : "s"} added` +
+        (incoming.length - added > 0
+          ? ` (${incoming.length - added} already on this phone).`
+          : ".")
+    );
+  }
+
   async function openLibrary() {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     setLibrary(raw ? (JSON.parse(raw) as LabeledEvent[]) : []);
@@ -327,8 +413,46 @@ export default function App() {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }
 
-  function deleteSaved(id: string) {
-    void persistLibrary(library.filter((l) => l.event.id !== id));
+  function deleteDrive(driveId: string) {
+    void persistLibrary(library.filter((l) => driveKeyOf(l) !== driveId));
+  }
+
+  /** Reopen a saved drive on the review screen, in edit mode. */
+  function openDriveForEdit(group: DriveGroup) {
+    setEvents(group.items.map((l) => l.event));
+    setLabels(Object.fromEntries(group.items.map((l) => [l.event.id, l.label])));
+    setIsDemo(false);
+    setEditingDriveId(group.driveId);
+    setPhase("review");
+  }
+
+  function cancelDriveEdit() {
+    setEditingDriveId(null);
+    setEvents([]);
+    setLabels({});
+    setPhase("library");
+  }
+
+  function removeEventFromEditor(id: string) {
+    setEvents((prev) => prev.filter((e) => e.id !== id));
+    setLabels((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+
+  async function saveDriveEdits() {
+    if (!editingDriveId) return;
+    const updated: LabeledEvent[] = events
+      .filter((e) => labels[e.id])
+      .map((e) => ({ event: e, label: labels[e.id]!, driveId: editingDriveId }));
+    const others = library.filter((l) => driveKeyOf(l) !== editingDriveId);
+    await persistLibrary([...others, ...updated]);
+    setEditingDriveId(null);
+    setEvents([]);
+    setLabels({});
+    setPhase("library");
   }
 
   function clearSaved() {
@@ -426,14 +550,21 @@ export default function App() {
     return (
       <View style={styles.screen}>
         <StatusBar style="dark" />
+        {editingDriveId && (
+          <Pressable style={styles.backRow} onPress={cancelDriveEdit} hitSlop={8}>
+            <Text style={styles.backRowText}>‹ Saved data</Text>
+          </Pressable>
+        )}
         <Text style={styles.h1}>
-          {isDemo ? "Demo results" : "Review drive"}
+          {editingDriveId ? "Edit drive" : isDemo ? "Demo results" : "Review drive"}
         </Text>
         <Text style={styles.sub}>
           {events.length} detection{events.length === 1 ? "" : "s"}
-          {isDemo
-            ? " · simulated — nothing will be saved"
-            : " · confirm each one to build training data"}
+          {editingDriveId
+            ? " · adjust labels or remove events, then save"
+            : isDemo
+              ? " · simulated — nothing will be saved"
+              : " · confirm each one to build training data"}
         </Text>
         {region && (
           <MapView style={styles.map} initialRegion={region}>
@@ -461,10 +592,19 @@ export default function App() {
               <View style={styles.card}>
                 <View style={styles.cardRow}>
                   <View style={[styles.dot, { backgroundColor: pinColor(item) }]} />
-                  <Text style={styles.cardTitle}>
+                  <Text style={[styles.cardTitle, editingDriveId && { flex: 1 }]}>
                     {item.classification.replace("_", " ")} ·{" "}
                     {Math.round(item.severity * 100)}%
                   </Text>
+                  {editingDriveId && (
+                    <Pressable
+                      onPress={() => removeEventFromEditor(item.id)}
+                      style={styles.trashBtn}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.trashText}>🗑</Text>
+                    </Pressable>
+                  )}
                 </View>
                 <Text style={styles.cardMeta}>
                   {new Date(item.capturedAt).toLocaleTimeString()} ·{" "}
@@ -491,13 +631,18 @@ export default function App() {
             );
           }}
         />
-        <Pressable style={styles.primaryBtn} onPress={saveLabels}>
+        <Pressable
+          style={styles.primaryBtn}
+          onPress={editingDriveId ? saveDriveEdits : saveLabels}
+        >
           <Text style={styles.primaryBtnText}>
-            {isDemo
-              ? "Done"
-              : pending > 0
-                ? `Save (${pending} unlabeled skipped)`
-                : "Save labels"}
+            {editingDriveId
+              ? "Save changes"
+              : isDemo
+                ? "Done"
+                : pending > 0
+                  ? `Save (${pending} unlabeled skipped)`
+                  : "Save labels"}
           </Text>
         </Pressable>
       </View>
@@ -505,43 +650,44 @@ export default function App() {
   }
 
   if (phase === "library") {
+    const drives = groupLibraryByDrive(library);
     return (
       <View style={styles.screen}>
         <StatusBar style="dark" />
         <Text style={styles.h1}>Saved data</Text>
         <Text style={styles.sub}>
-          {library.length} labeled event{library.length === 1 ? "" : "s"} on
-          this phone
+          {library.length} labeled event{library.length === 1 ? "" : "s"} across{" "}
+          {drives.length} drive{drives.length === 1 ? "" : "s"}
         </Text>
         <FlatList
           style={{ flex: 1, alignSelf: "stretch" }}
-          data={library}
-          keyExtractor={(l) => l.event.id}
+          data={drives}
+          keyExtractor={(g) => g.driveId}
           ListEmptyComponent={<Text style={styles.sub}>Nothing saved yet.</Text>}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={styles.cardRow}>
-                <View
-                  style={[styles.dot, { backgroundColor: pinColor(item.event) }]}
-                />
-                <Text style={[styles.cardTitle, { flex: 1 }]}>
-                  {item.event.classification.replace("_", " ")} ·{" "}
-                  {Math.round(item.event.severity * 100)}%
+          renderItem={({ item: group }) => {
+            const potholeCount = group.items.filter((l) => l.label === "pothole").length;
+            return (
+              <Pressable style={styles.card} onPress={() => openDriveForEdit(group)}>
+                <View style={styles.cardRow}>
+                  <Text style={[styles.cardTitle, { flex: 1 }]}>
+                    {new Date(group.latestAt).toLocaleString()}
+                  </Text>
+                  <Pressable
+                    onPress={() => deleteDrive(group.driveId)}
+                    style={styles.trashBtn}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.trashText}>🗑</Text>
+                  </Pressable>
+                  <Text style={styles.rowBtnChevron}>›</Text>
+                </View>
+                <Text style={styles.cardMeta}>
+                  {group.items.length} event{group.items.length === 1 ? "" : "s"} ·{" "}
+                  {potholeCount} pothole{potholeCount === 1 ? "" : "s"} confirmed
                 </Text>
-                <Pressable
-                  onPress={() => deleteSaved(item.event.id)}
-                  style={styles.trashBtn}
-                  hitSlop={8}
-                >
-                  <Text style={styles.trashText}>🗑</Text>
-                </Pressable>
-              </View>
-              <Text style={styles.cardMeta}>
-                {new Date(item.event.capturedAt).toLocaleString()} · you said:{" "}
-                {item.label === "pothole" ? "✓ pothole" : "✗ not a pothole"}
-              </Text>
-            </View>
-          )}
+              </Pressable>
+            );
+          }}
         />
         {library.length > 0 && (
           <Pressable style={styles.secondaryBtn} onPress={clearSaved}>
@@ -640,6 +786,46 @@ export default function App() {
             <Text style={styles.rowBtnText}>⇪ Export training data</Text>
             <Text style={styles.rowBtnChevron}>›</Text>
           </Pressable>
+          <View style={styles.divider} />
+          <Pressable
+            style={styles.rowBtn}
+            onPress={() => setShowImportBox((v) => !v)}
+          >
+            <Text style={styles.rowBtnText}>⇩ Import training data</Text>
+            <Text style={styles.rowBtnChevron}>{showImportBox ? "︿" : "›"}</Text>
+          </Pressable>
+          {showImportBox && (
+            <View style={styles.importBox}>
+              <TextInput
+                style={styles.importInput}
+                placeholder="Paste the JSON from Export training data here"
+                placeholderTextColor="#9aa3ad"
+                autoCapitalize="none"
+                autoCorrect={false}
+                multiline
+                value={importText}
+                onChangeText={setImportText}
+              />
+              <View style={styles.importActions}>
+                <Pressable
+                  style={styles.importCancelBtn}
+                  onPress={() => {
+                    setShowImportBox(false);
+                    setImportText("");
+                  }}
+                >
+                  <Text style={styles.importCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.importBtn, !importText.trim() && styles.uploadBtnDisabled]}
+                  onPress={importTrainingData}
+                  disabled={!importText.trim()}
+                >
+                  <Text style={styles.uploadBtnText}>Import</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
         </View>
 
         <View style={styles.sectionCard}>
@@ -682,6 +868,8 @@ const styles = StyleSheet.create({
   },
   driveScreen: { backgroundColor: "#101317" },
   h1: { fontSize: 32, fontWeight: "800", color: "#1a1d21" },
+  backRow: { alignSelf: "flex-start", paddingVertical: 6, marginBottom: 2 },
+  backRowText: { color: "#e8442e", fontSize: 15, fontWeight: "600" },
   sub: {
     fontSize: 15,
     color: "#5b6570",
@@ -737,6 +925,36 @@ const styles = StyleSheet.create({
   },
   uploadBtnDisabled: { opacity: 0.6 },
   uploadBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  importBox: { marginTop: 4, paddingBottom: 4 },
+  importInput: {
+    alignSelf: "stretch",
+    backgroundColor: "#f6f7f9",
+    borderWidth: 1,
+    borderColor: "#e3e6ea",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: "#1a1d21",
+    minHeight: 90,
+    textAlignVertical: "top",
+  },
+  importActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 10,
+  },
+  importCancelBtn: { paddingVertical: 13, paddingHorizontal: 4 },
+  importCancelText: { color: "#5b6570", fontSize: 15, fontWeight: "600" },
+  importBtn: {
+    backgroundColor: "#e8442e",
+    borderRadius: 10,
+    paddingVertical: 13,
+    paddingHorizontal: 24,
+    alignItems: "center",
+  },
   homeFooter: { textAlign: "center", color: "#8a939d", fontSize: 12, marginTop: 4 },
   map: {
     alignSelf: "stretch",
