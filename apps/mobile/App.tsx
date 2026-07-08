@@ -51,6 +51,21 @@ interface DriveGroup {
   latestAt: string;
 }
 
+/** Shape of a row from GET /v1/training-data (services/ingestion) — local mirror, not a shared wire type. */
+interface ServerTrainingRow {
+  id: string;
+  capturedAt: string;
+  lat: number;
+  lng: number;
+  heading: number | null;
+  speedMps: number;
+  severity: number;
+  confidence: number;
+  classification: string;
+  modelVersion: string;
+  label: Label | null;
+}
+
 function isLabeledEvent(x: unknown): x is LabeledEvent {
   if (!x || typeof x !== "object") return false;
   const o = x as Record<string, unknown>;
@@ -134,6 +149,7 @@ export default function App() {
   const [editingDriveId, setEditingDriveId] = useState<string | null>(null);
   const [showImportBox, setShowImportBox] = useState(false);
   const [importText, setImportText] = useState("");
+  const [importingFromServer, setImportingFromServer] = useState(false);
 
   const pipeline = useRef<DetectionPipeline | null>(null);
   const liveLabels = useRef<Record<string, Label>>({});
@@ -362,6 +378,30 @@ export default function App() {
     await Share.share({ message: raw, title: "PotholeProof training data" });
   }
 
+  /** Merge incoming labeled events into local storage, deduped by event id. */
+  async function mergeLabeledEvents(incoming: LabeledEvent[]): Promise<number> {
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const existing: LabeledEvent[] = raw ? JSON.parse(raw) : [];
+    const byId = new Map(existing.map((l) => [l.event.id, l]));
+    let added = 0;
+    for (const item of incoming) {
+      if (!byId.has(item.event.id)) added++;
+      byId.set(item.event.id, item);
+    }
+    const merged = [...byId.values()];
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    setSavedCount(merged.length);
+    return added;
+  }
+
+  function announceImport(title: string, added: number, total: number) {
+    Alert.alert(
+      title,
+      `${added} new event${added === 1 ? "" : "s"} added` +
+        (total - added > 0 ? ` (${total - added} already on this phone).` : ".")
+    );
+  }
+
   async function importTrainingData() {
     let parsed: unknown;
     try {
@@ -378,27 +418,58 @@ export default function App() {
       Alert.alert("Couldn't read that", "Expected a list of labeled events.");
       return;
     }
-
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    const existing: LabeledEvent[] = raw ? JSON.parse(raw) : [];
-    const byId = new Map(existing.map((l) => [l.event.id, l]));
-    let added = 0;
-    for (const item of incoming) {
-      if (!byId.has(item.event.id)) added++;
-      byId.set(item.event.id, item);
-    }
-    const merged = [...byId.values()];
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-    setSavedCount(merged.length);
+    const added = await mergeLabeledEvents(incoming);
     setImportText("");
     setShowImportBox(false);
-    Alert.alert(
-      "Imported",
-      `${added} new event${added === 1 ? "" : "s"} added` +
-        (incoming.length - added > 0
-          ? ` (${incoming.length - added} already on this phone).`
-          : ".")
-    );
+    announceImport("Imported", added, incoming.length);
+  }
+
+  /** Pull the labeled set back off the ingestion server (the reverse of upload). */
+  async function importFromServer() {
+    const base = serverUrl.trim().replace(/\/+$/, "");
+    if (!/^https?:\/\//.test(base)) {
+      Alert.alert(
+        "Server URL needed",
+        "Enter the server URL in the box below first, e.g. http://192.168.1.20:4477"
+      );
+      return;
+    }
+    setImportingFromServer(true);
+    try {
+      const res = await fetch(`${base}/v1/training-data`);
+      if (!res.ok) throw new Error(`server said ${res.status}`);
+      const body = (await res.json()) as { events: ServerTrainingRow[] };
+      const incoming: LabeledEvent[] = (body.events ?? [])
+        .filter((r) => r.label === "pothole" || r.label === "not_pothole")
+        .map((r) => ({
+          event: {
+            id: r.id,
+            capturedAt: r.capturedAt,
+            location: { lat: r.lat, lng: r.lng },
+            ...(r.heading != null ? { heading: r.heading } : {}),
+            speedMps: r.speedMps,
+            severity: r.severity,
+            confidence: r.confidence,
+            classification: r.classification as JoltEvent["classification"],
+            modelVersion: r.modelVersion,
+          },
+          label: r.label!,
+        }));
+      if (incoming.length === 0) {
+        Alert.alert("Nothing to import", "The server has no labeled events yet.");
+        return;
+      }
+      const added = await mergeLabeledEvents(incoming);
+      setShowImportBox(false);
+      announceImport("Imported from server", added, incoming.length);
+    } catch (err) {
+      Alert.alert(
+        "Import failed",
+        `${String(err)}\n\nIs the server running and the phone on the same Wi-Fi?`
+      );
+    } finally {
+      setImportingFromServer(false);
+    }
   }
 
   async function openLibrary() {
@@ -824,6 +895,22 @@ export default function App() {
                   <Text style={styles.uploadBtnText}>Import</Text>
                 </Pressable>
               </View>
+              <View style={styles.importDividerRow}>
+                <View style={styles.importDividerLine} />
+                <Text style={styles.importDividerText}>or</Text>
+                <View style={styles.importDividerLine} />
+              </View>
+              <Pressable
+                style={[styles.demoBtn, importingFromServer && styles.uploadBtnDisabled]}
+                onPress={importFromServer}
+                disabled={importingFromServer}
+              >
+                <Text style={styles.demoBtnText}>
+                  {importingFromServer
+                    ? "Pulling…"
+                    : "⇩ Pull labeled data from server"}
+                </Text>
+              </Pressable>
             </View>
           )}
         </View>
@@ -955,6 +1042,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     alignItems: "center",
   },
+  importDividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginVertical: 10,
+  },
+  importDividerLine: { flex: 1, height: 1, backgroundColor: "#eef0f2" },
+  importDividerText: { fontSize: 12, color: "#8a939d" },
   homeFooter: { textAlign: "center", color: "#8a939d", fontSize: 12, marginTop: 4 },
   map: {
     alignSelf: "stretch",
