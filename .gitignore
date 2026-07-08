@@ -41,6 +41,9 @@ ml/models/*.tflite
 ml/models/*.onnx
 ml/data/raw/
 
+# Local ingestion server data (collect-only pilot server, per-machine)
+services/ingestion/*.sqlite
+
 # Editors / OS
 .idea/
 .vscode/*
