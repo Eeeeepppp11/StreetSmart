@@ -109,6 +109,47 @@ test("training-data returns only labeled events; junk labels are dropped", async
   assert.equal(data.events[0]!.anonDeviceId, "anon-1");
 });
 
+test("review-queue ranks borderline-confidence and high-severity unlabeled events first", async () => {
+  const base = await startServer();
+  await post(
+    base,
+    "/v1/uploads",
+    upload(
+      [
+        event("labeled", { confidence: 0.5, severity: 0.9 }), // excluded: has a label
+        event("confident-low-sev", { confidence: 0.95, severity: 0.1 }), // low priority
+        event("borderline", { confidence: 0.5, severity: 0.1 }), // high priority: dead-center borderline
+        event("severe", { confidence: 0.95, severity: 0.9 }), // high priority: severe
+      ],
+      { labeled: "pothole" }
+    )
+  );
+
+  const res = await fetch(base + "/v1/review-queue");
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { events: { id: string; priorityScore: number }[] };
+  const ids = body.events.map((e) => e.id);
+  assert.deepEqual(ids, ["borderline", "severe", "confident-low-sev"]);
+  assert.ok(body.events[0]!.priorityScore >= body.events[1]!.priorityScore);
+  assert.ok(!("label" in body.events[0]!));
+});
+
+test("review-queue respects ?limit= and rejects a bad limit", async () => {
+  const base = await startServer();
+  await post(
+    base,
+    "/v1/uploads",
+    upload([event("a", { confidence: 0.5 }), event("b", { confidence: 0.5 })])
+  );
+
+  const limited = await fetch(base + "/v1/review-queue?limit=1");
+  const limitedBody = (await limited.json()) as { events: unknown[] };
+  assert.equal(limitedBody.events.length, 1);
+
+  const bad = await fetch(base + "/v1/review-queue?limit=0");
+  assert.equal(bad.status, 400);
+});
+
 test("invalid JSON body → 400, unknown route → 404", async () => {
   const base = await startServer();
   const res = await fetch(base + "/v1/uploads", {
