@@ -19,6 +19,16 @@ import { Accelerometer, Gyroscope } from "expo-sensors";
 import * as Speech from "expo-speech";
 import { DetectionPipeline, makeSamples } from "@potholeproof/detector";
 import type { GpsFix } from "@potholeproof/detector";
+import {
+  AlertBundler,
+  DEFAULT_ALERT_SETTINGS,
+  phraseForBundle,
+  shouldAlert,
+  type AlertBundle,
+  type AlertMode,
+  type AlertSensitivity,
+  type AlertSettings,
+} from "@potholeproof/alert-settings";
 import type { JoltEvent, LatLng, SensorSample, Vec3 } from "@potholeproof/shared-types";
 
 const G = 9.81; // expo-sensors accelerometer reports g-force incl. gravity
@@ -28,8 +38,20 @@ const STORAGE_KEY = "pp.labeled.v1";
 const ROUTES_KEY = "pp.routes.v1";
 const SERVER_KEY = "pp.server.url";
 const ANON_KEY = "pp.anon.id";
+const ALERT_SETTINGS_KEY = "pp.alertSettings.v1";
 const MODEL_VERSION = "heuristic-v0-expo";
 const APP_VERSION = "0.2.0";
+
+const SENSITIVITY_OPTIONS: { value: AlertSensitivity; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "moderate", label: "Moderate+" },
+  { value: "severe_only", label: "Severe only" },
+];
+const ALERT_MODE_OPTIONS: { value: AlertMode; label: string }[] = [
+  { value: "voice_haptic", label: "Voice + Haptic" },
+  { value: "haptic_only", label: "Haptic only" },
+  { value: "silent", label: "Silent" },
+];
 
 type Label = "pothole" | "not_pothole";
 interface LabeledEvent {
@@ -151,9 +173,12 @@ export default function App() {
   const [showImportBox, setShowImportBox] = useState(false);
   const [importText, setImportText] = useState("");
   const [importingFromServer, setImportingFromServer] = useState(false);
+  const [alertSettings, setAlertSettings] = useState<AlertSettings>(DEFAULT_ALERT_SETTINGS);
   const [routePoints, setRoutePoints] = useState<LatLng[]>([]);
 
   const pipeline = useRef<DetectionPipeline | null>(null);
+  const bundler = useRef<AlertBundler | null>(null);
+  const alertSettingsRef = useRef<AlertSettings>(DEFAULT_ALERT_SETTINGS);
   const liveLabels = useRef<Record<string, Label>>({});
   const driveIdRef = useRef<string>("");
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -176,13 +201,30 @@ export default function App() {
     AsyncStorage.getItem(STORAGE_KEY).then(
       (raw) => raw && setSavedCount((JSON.parse(raw) as unknown[]).length)
     );
+    AsyncStorage.getItem(ALERT_SETTINGS_KEY).then((raw) => {
+      if (!raw) return;
+      const next = { ...DEFAULT_ALERT_SETTINGS, ...JSON.parse(raw) };
+      alertSettingsRef.current = next;
+      setAlertSettings(next);
+    });
   }, []);
+
+  /** Update alert settings and persist, from the home-screen settings panel. */
+  function updateAlertSettings(patch: Partial<AlertSettings>) {
+    setAlertSettings((prev) => {
+      const next = { ...prev, ...patch };
+      alertSettingsRef.current = next;
+      void AsyncStorage.setItem(ALERT_SETTINGS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
 
   function freshPipeline() {
     pipeline.current = new DetectionPipeline({
       nextId: () => `evt-${Date.now()}-${++seq.current}`,
       modelVersion: MODEL_VERSION,
     });
+    bundler.current = new AlertBundler({ now: () => Date.now() }, alertSettingsRef.current);
     buffer.current = [];
     liveLabels.current = {};
     routeRef.current = [];
@@ -195,17 +237,17 @@ export default function App() {
     setPendingConfirm(null);
   }
 
-  /** Speak the detection and open a 6 s tap-anywhere confirm window. */
-  function announce(found: JoltEvent[]) {
-    const latest = found[found.length - 1]!;
-    const what =
-      latest.classification === "pothole"
-        ? "Pothole?"
-        : latest.classification === "speed_bump"
-          ? "Speed bump?"
-          : "Rough road?";
-    Speech.stop();
-    Speech.speak(`${what} Tap to confirm pothole.`, { rate: 1.05 });
+  /** Alert (per current mode) for a drained bundle and open a 6 s tap-anywhere confirm window. */
+  function announceBundle(bundle: AlertBundle) {
+    const latest = bundle.events[bundle.events.length - 1]!;
+    const mode = alertSettingsRef.current.mode;
+    if (mode !== "silent") {
+      Vibration.vibrate(150);
+    }
+    if (mode === "voice_haptic") {
+      Speech.stop();
+      Speech.speak(phraseForBundle(bundle), { rate: 1.05 });
+    }
     if (confirmTimer.current) clearTimeout(confirmTimer.current);
     setPendingConfirm(latest);
     confirmTimer.current = setTimeout(() => setPendingConfirm(null), 6000);
@@ -279,10 +321,13 @@ export default function App() {
       setSampleHz(Math.round((batch.length * 1000) / DRAIN_INTERVAL_MS));
       const found = pipeline.current?.push(batch) ?? [];
       if (found.length > 0) {
-        Vibration.vibrate(150);
         setEvents((prev) => [...prev, ...found]);
-        announce(found);
+        for (const e of found) {
+          if (shouldAlert(e, alertSettingsRef.current)) bundler.current?.add(e);
+        }
       }
+      const bundle = bundler.current?.drain();
+      if (bundle) announceBundle(bundle);
     }, DRAIN_INTERVAL_MS);
 
     setPhase("driving");
@@ -322,10 +367,13 @@ export default function App() {
       setSampleHz(Math.round((batch.length * 1000) / DRAIN_INTERVAL_MS));
       const found = pipeline.current.push(batch);
       if (found.length > 0) {
-        Vibration.vibrate(150);
         setEvents((prev) => [...prev, ...found]);
-        announce(found);
+        for (const e of found) {
+          if (shouldAlert(e, alertSettingsRef.current)) bundler.current?.add(e);
+        }
       }
+      const bundle = bundler.current?.drain();
+      if (bundle) announceBundle(bundle);
       if (d.cursor >= d.samples.length) stopDrive();
     }, DRAIN_INTERVAL_MS);
 
@@ -340,6 +388,7 @@ export default function App() {
     const tail = pipeline.current?.flush() ?? [];
     if (tail.length > 0) setEvents((prev) => [...prev, ...tail]);
     pipeline.current = null;
+    bundler.current = null;
     demo.current = null;
     if (confirmTimer.current) clearTimeout(confirmTimer.current);
     confirmTimer.current = null;
@@ -896,6 +945,54 @@ export default function App() {
         </View>
 
         <View style={styles.sectionCard}>
+          <Text style={styles.sectionLabel}>Alert settings</Text>
+          <Text style={styles.settingsLabel}>Sensitivity</Text>
+          <View style={styles.segmentRow}>
+            {SENSITIVITY_OPTIONS.map((opt) => (
+              <Pressable
+                key={opt.value}
+                style={[
+                  styles.segmentBtn,
+                  alertSettings.sensitivity === opt.value && styles.segmentBtnActive,
+                ]}
+                onPress={() => updateAlertSettings({ sensitivity: opt.value })}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    alertSettings.sensitivity === opt.value && styles.segmentTextActive,
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={[styles.settingsLabel, styles.settingsLabelSpaced]}>Alert mode</Text>
+          <View style={styles.segmentRow}>
+            {ALERT_MODE_OPTIONS.map((opt) => (
+              <Pressable
+                key={opt.value}
+                style={[
+                  styles.segmentBtn,
+                  alertSettings.mode === opt.value && styles.segmentBtnActive,
+                ]}
+                onPress={() => updateAlertSettings({ mode: opt.value })}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    alertSettings.mode === opt.value && styles.segmentTextActive,
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.sectionCard}>
           <Text style={styles.sectionLabel}>Your data</Text>
           <View style={styles.statRow}>
             <Text style={[styles.statValue, !savedCount && styles.statValueEmpty]}>
@@ -1055,6 +1152,24 @@ const styles = StyleSheet.create({
   statValueEmpty: { color: "#c3c9d0" },
   statCaption: { flex: 1, fontSize: 13, color: "#5b6570" },
   divider: { height: 1, backgroundColor: "#eef0f2", marginVertical: 4 },
+  settingsLabel: { fontSize: 13, fontWeight: "600", color: "#5b6570" },
+  settingsLabelSpaced: { marginTop: 14 },
+  segmentRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  segmentBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#d5dae0",
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: "center",
+  },
+  segmentBtnActive: { backgroundColor: "#fbe3e0", borderColor: "#e8442e" },
+  segmentText: { fontSize: 12, fontWeight: "600", color: "#5b6570" },
+  segmentTextActive: { color: "#e8442e" },
   rowBtn: {
     flexDirection: "row",
     alignItems: "center",

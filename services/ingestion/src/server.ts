@@ -84,6 +84,75 @@ function insertEvents(
   return { stored, duplicates: events.length - stored };
 }
 
+/** Default/max size for a `GET /v1/review-queue` page. */
+export const DEFAULT_REVIEW_QUEUE_LIMIT = 50;
+export const MAX_REVIEW_QUEUE_LIMIT = 500;
+
+export interface ReviewQueueItem extends Omit<StoredEventRow, "label"> {
+  /** Higher = more useful for a human to label next. Not persisted. */
+  priorityScore: number;
+}
+
+/**
+ * Ranking for the human review queue (no model retraining or scoring here —
+ * just a heuristic over already-stored confidence/severity to order unlabeled
+ * events for a human reviewer).
+ *
+ * Two independent signals are summed:
+ *  - Borderline confidence (0.35–0.65): these are the events the *current*
+ *    detector is least sure about, so a label here teaches it the most.
+ *    Score peaks at 1 when confidence == 0.5 and falls linearly to 0 at the
+ *    band edges; outside the band it's 0.
+ *  - High severity: an unlabeled high-severity event is the ones most likely
+ *    to reach a civic report before any human has ever confirmed it's real,
+ *    so severity itself (0..1) is added as a priority signal.
+ * The two scores are just added (range 0..2) and sorted descending — this is
+ * a simple, explainable ordering, not a calibrated model.
+ */
+const BORDERLINE_LOW = 0.35;
+const BORDERLINE_HIGH = 0.65;
+const BORDERLINE_CENTER = 0.5;
+const BORDERLINE_HALF_WIDTH = BORDERLINE_CENTER - BORDERLINE_LOW;
+
+function borderlineScore(confidence: number): number {
+  if (confidence < BORDERLINE_LOW || confidence > BORDERLINE_HIGH) return 0;
+  return 1 - Math.abs(confidence - BORDERLINE_CENTER) / BORDERLINE_HALF_WIDTH;
+}
+
+function reviewPriority(confidence: number, severity: number): number {
+  return borderlineScore(confidence) + severity;
+}
+
+function listReviewQueue(db: DatabaseSync, limit: number): ReviewQueueItem[] {
+  const rows = db
+    .prepare(
+      `SELECT id, captured_at, lat, lng, heading, speed_mps, severity,
+              confidence, classification, model_version, anon_device_id,
+              received_at
+       FROM events WHERE label IS NULL`
+    )
+    .all() as Record<string, unknown>[];
+
+  return rows
+    .map((r) => ({
+      id: r.id as string,
+      capturedAt: r.captured_at as string,
+      lat: r.lat as number,
+      lng: r.lng as number,
+      heading: (r.heading as number | null) ?? null,
+      speedMps: r.speed_mps as number,
+      severity: r.severity as number,
+      confidence: r.confidence as number,
+      classification: r.classification as string,
+      modelVersion: r.model_version as string,
+      anonDeviceId: r.anon_device_id as string,
+      receivedAt: r.received_at as string,
+      priorityScore: reviewPriority(r.confidence as number, r.severity as number),
+    }))
+    .sort((a, b) => b.priorityScore - a.priorityScore)
+    .slice(0, limit);
+}
+
 function listTrainingData(db: DatabaseSync): StoredEventRow[] {
   const rows = db
     .prepare(
@@ -162,6 +231,19 @@ export function createIngestionServer(options: IngestionServerOptions): Server {
 
       if (req.method === "GET" && req.url === "/v1/training-data") {
         send(200, { events: listTrainingData(db) });
+        return;
+      }
+
+      if (req.method === "GET" && req.url?.startsWith("/v1/review-queue")) {
+        const url = new URL(req.url, "http://localhost");
+        const rawLimit = url.searchParams.get("limit");
+        const parsedLimit = rawLimit === null ? DEFAULT_REVIEW_QUEUE_LIMIT : Number(rawLimit);
+        if (!Number.isFinite(parsedLimit) || parsedLimit <= 0) {
+          send(400, { ok: false, error: "limit must be a positive number" });
+          return;
+        }
+        const limit = Math.min(Math.floor(parsedLimit), MAX_REVIEW_QUEUE_LIMIT);
+        send(200, { events: listReviewQueue(db, limit) });
         return;
       }
 

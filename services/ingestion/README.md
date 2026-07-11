@@ -24,6 +24,10 @@ to build the ML training set. No hazard map, no civic submission.
     (`INSERT OR IGNORE` on event id, so re-uploads are safe).
   - `GET /v1/health` — event/labeled counts.
   - `GET /v1/training-data` — the labeled set, ready for the `ml/` rig.
+  - `GET /v1/review-queue` — unlabeled events ranked by how useful they'd be
+    for a human to label next (borderline-confidence + high-severity events
+    first, instead of the review screen's current random order). `?limit=`
+    overrides the default page size of 50 (capped at 500).
 
 ## Run it
 
