@@ -12,7 +12,7 @@ import {
   Vibration,
   View,
 } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import MapView, { Marker, Polyline } from "react-native-maps";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { Accelerometer, Gyroscope } from "expo-sensors";
@@ -29,12 +29,13 @@ import {
   type AlertSensitivity,
   type AlertSettings,
 } from "@potholeproof/alert-settings";
-import type { JoltEvent, SensorSample, Vec3 } from "@potholeproof/shared-types";
+import type { JoltEvent, LatLng, SensorSample, Vec3 } from "@potholeproof/shared-types";
 
 const G = 9.81; // expo-sensors accelerometer reports g-force incl. gravity
 const SENSOR_INTERVAL_MS = 20; // request ~50 Hz
 const DRAIN_INTERVAL_MS = 300;
 const STORAGE_KEY = "pp.labeled.v1";
+const ROUTES_KEY = "pp.routes.v1";
 const SERVER_KEY = "pp.server.url";
 const ANON_KEY = "pp.anon.id";
 const ALERT_SETTINGS_KEY = "pp.alertSettings.v1";
@@ -173,6 +174,7 @@ export default function App() {
   const [importText, setImportText] = useState("");
   const [importingFromServer, setImportingFromServer] = useState(false);
   const [alertSettings, setAlertSettings] = useState<AlertSettings>(DEFAULT_ALERT_SETTINGS);
+  const [routePoints, setRoutePoints] = useState<LatLng[]>([]);
 
   const pipeline = useRef<DetectionPipeline | null>(null);
   const bundler = useRef<AlertBundler | null>(null);
@@ -182,6 +184,7 @@ export default function App() {
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const buffer = useRef<SensorSample[]>([]);
   const lastGyro = useRef<Vec3>({ x: 0, y: 0, z: 0 });
+  const routeRef = useRef<LatLng[]>([]);
   const seq = useRef(0);
   const subs = useRef<{ remove: () => void }[]>([]);
   const drainTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -224,10 +227,12 @@ export default function App() {
     bundler.current = new AlertBundler({ now: () => Date.now() }, alertSettingsRef.current);
     buffer.current = [];
     liveLabels.current = {};
+    routeRef.current = [];
     driveIdRef.current = `drive-${Date.now()}`;
     setEditingDriveId(null);
     setEvents([]);
     setLabels({});
+    setRoutePoints([]);
     setSampleHz(0);
     setPendingConfirm(null);
   }
@@ -304,6 +309,7 @@ export default function App() {
             ...(heading !== null && heading >= 0 ? { heading } : {}),
           };
           pipeline.current?.pushGps(fix);
+          routeRef.current.push(fix.location);
           setGpsOk(true);
           setSpeedMps(Math.max(0, loc.coords.speed ?? 0));
         }
@@ -345,6 +351,7 @@ export default function App() {
       ) {
         const fix = d.gps[d.gpsCursor]!;
         pipeline.current.pushGps(fix);
+        routeRef.current.push(fix.location);
         setSpeedMps(fix.speedMps);
         d.gpsCursor++;
       }
@@ -389,6 +396,7 @@ export default function App() {
     Speech.stop();
     // Voice-confirmed labels pre-fill the review screen.
     setLabels({ ...liveLabels.current });
+    setRoutePoints([...routeRef.current]);
     setSpeedMps(0);
     setPhase("review");
   }
@@ -412,6 +420,7 @@ export default function App() {
     const existing: LabeledEvent[] = raw ? JSON.parse(raw) : [];
     const merged = [...existing, ...labeled];
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    await saveRoute(driveIdRef.current, routeRef.current);
     setSavedCount(merged.length);
     setEvents([]);
     setLabels({});
@@ -533,16 +542,36 @@ export default function App() {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }
 
-  function deleteDrive(driveId: string) {
-    void persistLibrary(library.filter((l) => driveKeyOf(l) !== driveId));
+  /** Per-drive GPS tracks, stored locally only — never exported/uploaded. */
+  async function loadRoutes(): Promise<Record<string, LatLng[]>> {
+    const raw = await AsyncStorage.getItem(ROUTES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  }
+
+  async function saveRoute(driveId: string, points: LatLng[]) {
+    if (points.length < 2) return;
+    const routes = await loadRoutes();
+    routes[driveId] = points;
+    await AsyncStorage.setItem(ROUTES_KEY, JSON.stringify(routes));
+  }
+
+  async function deleteDrive(driveId: string) {
+    await persistLibrary(library.filter((l) => driveKeyOf(l) !== driveId));
+    const routes = await loadRoutes();
+    if (routes[driveId]) {
+      delete routes[driveId];
+      await AsyncStorage.setItem(ROUTES_KEY, JSON.stringify(routes));
+    }
   }
 
   /** Reopen a saved drive on the review screen, in edit mode. */
-  function openDriveForEdit(group: DriveGroup) {
+  async function openDriveForEdit(group: DriveGroup) {
     setEvents(group.items.map((l) => l.event));
     setLabels(Object.fromEntries(group.items.map((l) => [l.event.id, l.label])));
     setIsDemo(false);
     setEditingDriveId(group.driveId);
+    const routes = await loadRoutes();
+    setRoutePoints(routes[group.driveId] ?? []);
     setPhase("review");
   }
 
@@ -584,7 +613,10 @@ export default function App() {
         {
           text: "Delete all",
           style: "destructive",
-          onPress: () => void persistLibrary([]),
+          onPress: () => {
+            void persistLibrary([]);
+            void AsyncStorage.removeItem(ROUTES_KEY);
+          },
         },
       ]
     );
@@ -655,10 +687,10 @@ export default function App() {
 
   if (phase === "review") {
     const pending = events.filter((e) => !labels[e.id]).length;
-    const lats = events.map((e) => e.location.lat);
-    const lngs = events.map((e) => e.location.lng);
+    const lats = [...events.map((e) => e.location.lat), ...routePoints.map((p) => p.lat)];
+    const lngs = [...events.map((e) => e.location.lng), ...routePoints.map((p) => p.lng)];
     const region =
-      events.length > 0
+      lats.length > 0
         ? {
             latitude: (Math.min(...lats) + Math.max(...lats)) / 2,
             longitude: (Math.min(...lngs) + Math.max(...lngs)) / 2,
@@ -688,6 +720,34 @@ export default function App() {
         </Text>
         {region && (
           <MapView style={styles.map} initialRegion={region}>
+            {routePoints.length > 1 && (
+              <>
+                <Polyline
+                  coordinates={routePoints.map((p) => ({
+                    latitude: p.lat,
+                    longitude: p.lng,
+                  }))}
+                  strokeColor="#4a72da"
+                  strokeWidth={4}
+                />
+                <Marker
+                  coordinate={{
+                    latitude: routePoints[0]!.lat,
+                    longitude: routePoints[0]!.lng,
+                  }}
+                  pinColor="#2e9e4f"
+                  title="Start"
+                />
+                <Marker
+                  coordinate={{
+                    latitude: routePoints[routePoints.length - 1]!.lat,
+                    longitude: routePoints[routePoints.length - 1]!.lng,
+                  }}
+                  pinColor="#1a1d21"
+                  title="End"
+                />
+              </>
+            )}
             {events.map((e) => (
               <Marker
                 key={e.id}
