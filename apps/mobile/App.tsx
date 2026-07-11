@@ -63,6 +63,15 @@ interface LabeledEvent {
 
 type Phase = "idle" | "driving" | "review" | "library";
 
+/** Latest GPS position shown on the live drive map (real or simulated). */
+interface LiveFix {
+  lat: number;
+  lng: number;
+}
+
+/** Zoom of the follow-me drive map (~0.004° ≈ 400 m across). */
+const LIVE_MAP_DELTA = 0.004;
+
 /** Stable grouping key — falls back to the capture date for data saved before driveId existed. */
 function driveKeyOf(item: LabeledEvent): string {
   return item.driveId ?? `legacy-${item.event.capturedAt.slice(0, 10)}`;
@@ -169,6 +178,7 @@ export default function App() {
   const [uploading, setUploading] = useState(false);
   const [library, setLibrary] = useState<LabeledEvent[]>([]);
   const [pendingConfirm, setPendingConfirm] = useState<JoltEvent | null>(null);
+  const [liveFix, setLiveFix] = useState<LiveFix | null>(null);
   const [editingDriveId, setEditingDriveId] = useState<string | null>(null);
   const [showImportBox, setShowImportBox] = useState(false);
   const [importText, setImportText] = useState("");
@@ -179,6 +189,7 @@ export default function App() {
   const pipeline = useRef<DetectionPipeline | null>(null);
   const bundler = useRef<AlertBundler | null>(null);
   const alertSettingsRef = useRef<AlertSettings>(DEFAULT_ALERT_SETTINGS);
+  const liveMap = useRef<MapView | null>(null);
   const liveLabels = useRef<Record<string, Label>>({});
   const driveIdRef = useRef<string>("");
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -219,6 +230,20 @@ export default function App() {
     });
   }
 
+  // Keep the live drive map centered on the car as fixes arrive (~1 Hz).
+  useEffect(() => {
+    if (!liveFix) return;
+    liveMap.current?.animateToRegion(
+      {
+        latitude: liveFix.lat,
+        longitude: liveFix.lng,
+        latitudeDelta: LIVE_MAP_DELTA,
+        longitudeDelta: LIVE_MAP_DELTA,
+      },
+      650
+    );
+  }, [liveFix]);
+
   function freshPipeline() {
     pipeline.current = new DetectionPipeline({
       nextId: () => `evt-${Date.now()}-${++seq.current}`,
@@ -235,6 +260,7 @@ export default function App() {
     setRoutePoints([]);
     setSampleHz(0);
     setPendingConfirm(null);
+    setLiveFix(null);
   }
 
   /** Alert (per current mode) for a drained bundle and open a 6 s tap-anywhere confirm window. */
@@ -312,6 +338,7 @@ export default function App() {
           routeRef.current.push(fix.location);
           setGpsOk(true);
           setSpeedMps(Math.max(0, loc.coords.speed ?? 0));
+          setLiveFix({ lat: fix.location.lat, lng: fix.location.lng });
         }
       )
     );
@@ -353,6 +380,7 @@ export default function App() {
         pipeline.current.pushGps(fix);
         routeRef.current.push(fix.location);
         setSpeedMps(fix.speedMps);
+        setLiveFix({ lat: fix.location.lat, lng: fix.location.lng });
         d.gpsCursor++;
       }
 
@@ -890,17 +918,61 @@ export default function App() {
             <Text style={styles.demoBadgeText}>SIMULATED DRIVE</Text>
           </View>
         )}
-        <Text style={styles.driveSpeed}>
-          {(speedMps * 2.237).toFixed(0)}
-          <Text style={styles.driveSpeedUnit}> mph</Text>
-        </Text>
-        <Text style={styles.driveStat}>
-          sensors {sampleHz} Hz · GPS {gpsOk ? "✓" : "…"}
-        </Text>
-        <Text style={styles.driveCount}>{events.length}</Text>
-        <Text style={styles.driveStat}>
-          jolt{events.length === 1 ? "" : "s"} detected
-        </Text>
+        <View style={styles.driveHud}>
+          <View style={styles.driveHudCell}>
+            <Text style={styles.driveSpeed}>
+              {(speedMps * 2.237).toFixed(0)}
+              <Text style={styles.driveSpeedUnit}> mph</Text>
+            </Text>
+            <Text style={styles.driveStat}>
+              sensors {sampleHz} Hz · GPS {gpsOk ? "✓" : "…"}
+            </Text>
+          </View>
+          <View style={[styles.driveHudCell, styles.driveHudCellRight]}>
+            <Text style={styles.driveCount}>{events.length}</Text>
+            <Text style={styles.driveStat}>
+              jolt{events.length === 1 ? "" : "s"} detected
+            </Text>
+          </View>
+        </View>
+        <View style={styles.liveMapWrap}>
+          {liveFix ? (
+            <MapView
+              ref={liveMap}
+              style={styles.liveMap}
+              initialRegion={{
+                latitude: liveFix.lat,
+                longitude: liveFix.lng,
+                latitudeDelta: LIVE_MAP_DELTA,
+                longitudeDelta: LIVE_MAP_DELTA,
+              }}
+              scrollEnabled={false}
+              zoomEnabled={false}
+              rotateEnabled={false}
+              pitchEnabled={false}
+              toolbarEnabled={false}
+            >
+              <Marker
+                coordinate={{ latitude: liveFix.lat, longitude: liveFix.lng }}
+                anchor={{ x: 0.5, y: 0.5 }}
+                flat
+              >
+                <View style={styles.carDot} />
+              </Marker>
+              {events.map((e) => (
+                <Marker
+                  key={e.id}
+                  coordinate={{ latitude: e.location.lat, longitude: e.location.lng }}
+                  pinColor={pinColor(e)}
+                />
+              ))}
+            </MapView>
+          ) : (
+            <View style={styles.liveMapWaiting}>
+              <Text style={styles.driveStat}>waiting for GPS fix…</Text>
+            </View>
+          )}
+        </View>
         <Pressable style={styles.stopBtn} onPress={stopDrive}>
           <Text style={styles.primaryBtnText}>END DRIVE</Text>
         </Pressable>
@@ -1110,7 +1182,11 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: 72,
   },
-  driveScreen: { backgroundColor: "#101317" },
+  driveScreen: {
+    backgroundColor: "#101317",
+    justifyContent: "flex-start",
+    alignItems: "stretch",
+  },
   h1: { fontSize: 32, fontWeight: "800", color: "#1a1d21" },
   backRow: { alignSelf: "flex-start", paddingVertical: 6, marginBottom: 2 },
   backRowText: { color: "#e8442e", fontSize: 15, fontWeight: "600" },
@@ -1282,31 +1358,59 @@ const styles = StyleSheet.create({
     color: "#1a1d21",
   },
   demoBadge: {
-    position: "absolute",
-    top: 64,
+    alignSelf: "center",
     backgroundColor: "#e8812e",
     borderRadius: 6,
     paddingHorizontal: 12,
     paddingVertical: 4,
+    marginBottom: 12,
   },
   demoBadgeText: { color: "#fff", fontWeight: "800", fontSize: 12, letterSpacing: 1 },
-  driveSpeed: { fontSize: 96, fontWeight: "200", color: "#fff" },
-  driveSpeedUnit: { fontSize: 24, color: "#8a939d" },
-  driveCount: { fontSize: 64, fontWeight: "800", color: "#e8442e", marginTop: 24 },
+  driveHud: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+  },
+  driveHudCell: { alignItems: "flex-start" },
+  driveHudCellRight: { alignItems: "flex-end" },
+  driveSpeed: { fontSize: 52, fontWeight: "200", color: "#fff" },
+  driveSpeedUnit: { fontSize: 20, color: "#8a939d" },
+  driveCount: { fontSize: 52, fontWeight: "800", color: "#e8442e" },
   driveStat: { fontSize: 14, color: "#8a939d", marginTop: 4 },
+  liveMapWrap: {
+    flex: 1,
+    alignSelf: "stretch",
+    borderRadius: 16,
+    overflow: "hidden",
+    marginTop: 16,
+  },
+  liveMap: { flex: 1 },
+  liveMapWaiting: {
+    flex: 1,
+    backgroundColor: "#1a2027",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  carDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#1f6fe8",
+    borderWidth: 3,
+    borderColor: "#fff",
+  },
   driveHint: {
-    position: "absolute",
-    bottom: 28,
     color: "#5b6570",
     fontSize: 13,
     textAlign: "center",
+    marginTop: 12,
   },
   stopBtn: {
     backgroundColor: "#e8442e",
     paddingVertical: 18,
     paddingHorizontal: 48,
     borderRadius: 999,
-    marginTop: 40,
+    marginTop: 16,
     alignSelf: "stretch",
     alignItems: "center",
   },
