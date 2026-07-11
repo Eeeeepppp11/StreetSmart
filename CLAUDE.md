@@ -40,7 +40,7 @@ platform, intentionally outside the workspace** with its own tooling.
 | `apps/mobile` | React Native (Expo) pilot app | 1 | **runs** in Expo Go |
 | `apps/dashboard` | Next.js public scorecard site | 4 | builds |
 | `infra/` | Postgres+PostGIS, Redis, queue (IaC) | — | docs only |
-| `ml/` | Python: replay harness, training, TFLite export | 1+ | docs only |
+| `ml/` | Python: replay harness, training, TFLite export | 1+ | replay harness + dataset stats built (uv); training/export docs only |
 
 ## Commands
 
@@ -82,6 +82,11 @@ pnpm --filter @potholeproof/dashboard build
 
 # ingestion collect-only server (prints the LAN URL for the phone's upload box)
 pnpm --filter @potholeproof/ingestion build && pnpm --filter @potholeproof/ingestion serve
+
+# ml/ replay harness (Python via uv, run from ml/; needs a built detector —
+# the harness shells out to packages/detector/dist/cli.js)
+cd ml && uv run pytest                       # incl. end-to-end bridge tests
+uv run python -m replay.cli eval             # golden-drive regression check
 ```
 
 ## Architecture
@@ -170,8 +175,10 @@ there first:
   end state. Deliberate for the pilot.
 - The mobile app is Expo Go (foreground-only, ~50 Hz), not the bare-RN native
   TurboModule (background, 100 Hz) that `docs/ARCHITECTURE.md` targets.
-- `ml/` and `infra/` are documentation/scaffold only — they need external
-  tooling/services not available in this repo.
+- `infra/` is documentation/scaffold only — it needs external services not
+  available in this repo. In `ml/`, training/export/registry are still docs
+  only (they need real labeled data); the replay harness and dataset tooling
+  are built and tested (see `ml/README.md`).
 - **Expo SDK 54 is pinned deliberately** (the pilot phone's Expo Go). Never
   hand-bump Expo/RN versions; use `expo install --fix`. See
   `apps/mobile/AGENTS.md`.

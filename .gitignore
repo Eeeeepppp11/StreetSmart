@@ -40,6 +40,10 @@ __pycache__/
 ml/models/*.tflite
 ml/models/*.onnx
 ml/data/raw/
+# Pulled labeled events carry precise pilot-drive GPS — keep them out of git;
+# the ingestion server's SQLite is the source of truth.
+ml/data/labeled/
+.ruff_cache/
 
 # Local ingestion server data (collect-only pilot server, per-machine)
 services/ingestion/*.sqlite

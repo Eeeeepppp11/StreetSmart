@@ -7,6 +7,57 @@ Newest entry first.
 
 ---
 
+## Cycle 20 — Fri Jul 11 (user-directed) · Live map on the drive screen
+
+The map was review-only; user asked to see it *while driving*, not just as a
+post-drive summary.
+
+- **Drive screen is now map-first** — the speedometer and jolt counter shrink
+  into a top HUD row; a follow-me map fills the rest of the screen. It
+  auto-centers on every GPS fix (`animateToRegion` at ~1 Hz, ~400 m zoom),
+  with all gestures disabled — glanceable, never fightable, while mounted.
+- Detections drop severity-colored pins the moment they fire (same `pinColor`
+  scheme as the review map); the car is a blue dot marker. Works identically
+  for real drives (Location fixes) and Demo Drive (synthetic fixes).
+- "waiting for GPS fix…" placeholder until the first fix; the tap-to-confirm
+  overlay still covers everything, so the voice-confirm flow is unchanged.
+
+**Verification:** mobile typecheck clean; `expo export` bundles clean for both
+iOS and Android (SDK 54).
+
+---
+
+## Cycle 19 — Wed Jul 8 (user-directed) · ML replay harness + dataset stats
+
+While real-drive data collection runs, built the data-independent half of the
+ML rig — `ml/README.md` called the replay harness "the single most important
+test asset in the project; build it first", so it went first.
+
+- **`packages/detector` CLI bridge** — `dist/cli.js synth|replay`: the Python
+  harness shells out to the **real compiled detector** instead of porting it
+  (no drift, ever). `golden.ts` builds deterministic golden drives (the Demo
+  Drive impulse recipe + a straight 1 Hz GPS track) with an embedded `truth`
+  array; `RecordedDrive` consumers ignore the extra key.
+- **`ml/` is now a real uv project** (Python 3.12 via `.python-version`,
+  pytest + ruff, `package = false` — modules run in place). `replay/` has the
+  Node bridge, truth-matching metrics (recall / precision / class accuracy;
+  events re-anchored to the drive clock via the GPS track), dataset pull
+  (`GET /v1/training-data`), and labeled-set stats (class balance,
+  heuristic-vs-human confusion, severity histogram, per-day/device progress).
+- **CLI**: `uv run python -m replay.cli eval` is the one-line golden-drive
+  regression check (exit 1 on any recall/precision/class regression);
+  `pull` + `stats` are the collection-day loop.
+- `ml/data/labeled/` is git-ignored — pulled rows carry precise pilot GPS;
+  the ingestion server's SQLite stays the source of truth.
+
+**Verification:** 97/97 TS tests (+5: golden fixtures, false-positive floor,
+determinism, CLI round-trip); 16/16 pytest (incl. 4 end-to-end bridge tests);
+ruff clean; live full-loop check — synth → replay → labeled upload to a real
+ingestion server on a scratch DB → `pull` → `stats` prints a correct
+confusion table (3 pothole / 1 not_pothole).
+
+---
+
 ## Cycle 18 — Mon Jul 6 (user-directed) · Demo frontend + map
 
 User asked for frontend help + a demo-recording plan (branch `demo-frontend`).

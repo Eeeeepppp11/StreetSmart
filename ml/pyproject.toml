@@ -1,0 +1,21 @@
+[project]
+name = "potholeproof-ml"
+version = "0.1.0"
+description = "PotholeProof ML platform: replay harness, dataset tooling, training (later)."
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+# Not an installable package (yet): top-level module dirs (replay/, later
+# training/, export/, registry/) run in place via `uv run python -m ...`.
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"

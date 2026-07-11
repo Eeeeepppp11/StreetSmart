@@ -11,3 +11,5 @@ export type { RecordedDrive } from "./replay.js";
 export { replayDrive } from "./replay.js";
 export type { SynthImpulse, SynthOptions } from "./synth.js";
 export { makeSamples } from "./synth.js";
+export type { TruthEvent, GoldenDrive, GoldenPreset } from "./golden.js";
+export { makeGoldenDrive } from "./golden.js";
