@@ -48,6 +48,9 @@ importers:
 
   apps/mobile:
     dependencies:
+      '@potholeproof/alert-settings':
+        specifier: workspace:*
+        version: link:../../packages/alert-settings
       '@potholeproof/detector':
         specifier: workspace:*
         version: link:../../packages/detector
@@ -90,6 +93,19 @@ importers:
         version: 19.1.17
       typescript:
         specifier: ~5.9.3
+        version: 5.9.3
+
+  packages/alert-settings:
+    dependencies:
+      '@potholeproof/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+    devDependencies:
+      '@types/node':
+        specifier: ^22.7.0
+        version: 22.20.0
+      typescript:
+        specifier: ^5.5.4
         version: 5.9.3
 
   packages/detector:
