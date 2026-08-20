@@ -191,12 +191,15 @@ export default function AdminScreen({ onClose }: AdminScreenProps) {
               <Text style={styles.detailClose}>×</Text>
             </Pressable>
           </View>
+          <View style={styles.aiBadgeRow}>
+            <Text style={styles.aiBadgeText}>🤖 {selected.event.modelVersion}</Text>
+          </View>
           <DetailRow
             label="Label"
             value={selected.label === "pothole" ? "Confirmed pothole" : "Not a pothole"}
           />
           <DetailRow label="Severity" value={`${Math.round(selected.event.severity * 100)}%`} />
-          <DetailRow label="Confidence" value={`${Math.round(selected.event.confidence * 100)}%`} />
+          <DetailRow label="AI confidence" value={`${Math.round(selected.event.confidence * 100)}%`} />
           <DetailRow label="Speed" value={`${(selected.event.speedMps * 2.237).toFixed(0)} mph`} />
           <DetailRow label="Captured" value={new Date(selected.event.capturedAt).toLocaleString()} />
           <DetailRow label="Drive" value={selected.driveId} />
@@ -262,6 +265,8 @@ const styles = StyleSheet.create({
   },
   detailHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   detailTitle: { fontSize: 17, fontWeight: "800", color: "#1a1d21", textTransform: "capitalize" },
+  aiBadgeRow: { marginTop: 4, marginBottom: 4 },
+  aiBadgeText: { fontSize: 11, fontWeight: "700", color: "#5b6570" },
   detailClose: { fontSize: 22, color: "#8a939d" },
   detailRow: {
     flexDirection: "row",
