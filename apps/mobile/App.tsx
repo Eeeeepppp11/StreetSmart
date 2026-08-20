@@ -24,6 +24,7 @@ import type { JoltEvent, LatLng, SensorSample, Vec3 } from "@potholeproof/shared
 import { useAuth } from "./auth/AuthContext";
 import SignInScreen from "./screens/SignInScreen";
 import AdminScreen from "./screens/AdminScreen";
+import NavigateScreen from "./screens/NavigateScreen";
 import SideNavbar from "./components/SideNavbar";
 import { isAdminEmail } from "./adminAuth";
 import {
@@ -58,7 +59,7 @@ interface LabeledEvent {
   driveId?: string;
 }
 
-type Phase = "idle" | "driving" | "review" | "library" | "admin";
+type Phase = "idle" | "driving" | "review" | "library" | "admin" | "navigate";
 
 /** Stable grouping key — falls back to the capture date for data saved before driveId existed. */
 function driveKeyOf(item: LabeledEvent): string {
@@ -969,6 +970,10 @@ export default function App() {
     return <AdminScreen onClose={() => setPhase("idle")} />;
   }
 
+  if (phase === "navigate") {
+    return <NavigateScreen onClose={() => setPhase("idle")} />;
+  }
+
   if (phase === "driving") {
     return (
       <View style={[styles.screen, styles.driveScreen]}>
@@ -1022,7 +1027,8 @@ export default function App() {
         email={user.email}
         contributedCount={cloudEventCount}
         isAdmin={isAdminEmail(user.email)}
-        onStartDrive={startDrive}
+        onNavigate={() => setPhase("navigate")}
+        onContribute={startDrive}
         onOpenLibrary={openLibrary}
         onOpenAdmin={() => setPhase("admin")}
         onLogOut={logOut}
@@ -1045,8 +1051,11 @@ export default function App() {
         </View>
 
         <View style={styles.heroGroup}>
-          <Pressable style={styles.primaryBtn} onPress={startDrive}>
-            <Text style={styles.primaryBtnText}>START DRIVE</Text>
+          <Pressable style={styles.primaryBtn} onPress={() => setPhase("navigate")}>
+            <Text style={styles.primaryBtnText}>START NAVIGATION</Text>
+          </Pressable>
+          <Pressable style={styles.demoBtn} onPress={startDrive}>
+            <Text style={styles.demoBtnText}>🚧 Survey Roads</Text>
           </Pressable>
           <Pressable style={styles.demoBtn} onPress={startDemoDrive}>
             <Text style={styles.demoBtnText}>▶ Demo drive (simulated)</Text>
