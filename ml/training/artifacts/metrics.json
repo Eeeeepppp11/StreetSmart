@@ -1,0 +1,93 @@
+{
+  "feature_order": [
+    "sampleCount",
+    "dtMs",
+    "peakToPeak",
+    "rms",
+    "maxAbsVert",
+    "maxJerk",
+    "settleMs",
+    "verticalDominance",
+    "gyroRms",
+    "speedMps"
+  ],
+  "labels": [
+    "pothole",
+    "speed_bump",
+    "rough_road",
+    "other"
+  ],
+  "test_accuracy": 0.9111111164093018,
+  "test_loss": 0.26756152510643005,
+  "pothole_false_positive_rate": 0.023127753303964757,
+  "classification_report": {
+    "pothole": {
+      "precision": 0.9424657534246575,
+      "recall": 0.9772727272727273,
+      "f1-score": 0.9595536959553695,
+      "support": 352.0
+    },
+    "speed_bump": {
+      "precision": 0.9587912087912088,
+      "recall": 0.9667590027700831,
+      "f1-score": 0.9627586206896551,
+      "support": 361.0
+    },
+    "rough_road": {
+      "precision": 0.8912280701754386,
+      "recall": 0.8193548387096774,
+      "f1-score": 0.853781512605042,
+      "support": 310.0
+    },
+    "other": {
+      "precision": 0.8170731707317073,
+      "recall": 0.8481012658227848,
+      "f1-score": 0.8322981366459627,
+      "support": 237.0
+    },
+    "accuracy": 0.9111111111111111,
+    "macro avg": {
+      "precision": 0.902389550780753,
+      "recall": 0.9028719586438182,
+      "f1-score": 0.9020979914740074,
+      "support": 1260.0
+    },
+    "weighted avg": {
+      "precision": 0.9109512815848463,
+      "recall": 0.9111111111111111,
+      "f1-score": 0.9105124526491362,
+      "support": 1260.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      344,
+      7,
+      1,
+      0
+    ],
+    [
+      5,
+      349,
+      6,
+      1
+    ],
+    [
+      4,
+      8,
+      254,
+      44
+    ],
+    [
+      12,
+      0,
+      24,
+      201
+    ]
+  ],
+  "dataset_size": 8400,
+  "train_size": 5880,
+  "val_size": 1260,
+  "test_size": 1260,
+  "note": "Trained on synthetic physically-parameterised windows, not real recorded drives."
+}

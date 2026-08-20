@@ -40,7 +40,7 @@ platform, intentionally outside the workspace** with its own tooling.
 | `apps/mobile` | React Native (Expo) pilot app | 1 | **runs** in Expo Go |
 | `apps/dashboard` | Next.js public scorecard site | 4 | builds |
 | `infra/` | Postgres+PostGIS, Redis, queue (IaC) | — | docs only |
-| `ml/` | Python: replay harness, training, TFLite export | 1+ | docs only |
+| `ml/` | Python: training + TFLite/pure-JS export, model registry | 1+ | training/export built; replay harness + real drive data not yet |
 
 ## Commands
 
@@ -128,10 +128,13 @@ envelopes). Change a wire shape there, not in a consumer.
   `rough_road` / `other`) → emit `JoltEvent`. `runDetection` (batch) and
   `DetectionPipeline` (streaming, cursor-based, what the app drives live) share
   the same decision helpers so they can't diverge — keep it that way. The
-  heuristic `classify` emits `DetectionResult`, the exact shape the future
-  TFLite model will emit (drop-in swap). `makeSamples` (`synth.ts`) generates
-  synthetic drives — used both by tests and by the app's **Demo Drive mode**
-  (`docs/DEMO.md`); demo events must never be saved as training data.
+  heuristic `classify` and the trained `classifyWithModel` (`model.ts`) both
+  emit the same `DetectionResult` shape and are swapped via the optional
+  `PipelineDeps.classify` — the app currently passes `classifyWithModel`
+  (`mlp-v1-synthetic`, see `ml/README.md`). `makeSamples` (`synth.ts`)
+  generates synthetic drives — used by tests, the app's **Demo Drive mode**
+  (`docs/DEMO.md`), and `scripts/gen-training-data.ts`'s training-data
+  generation; demo events must never be saved as training data.
 - **`services/hazard-engine`** — "confidence, not truth": per-H3-cell
   `HazardRecord`s whose `confidence` rises on `passCount` and decays on
   `cleanPassCount`; scheduled decay auto-retires (`status: retired`) with no
@@ -170,8 +173,14 @@ there first:
   end state. Deliberate for the pilot.
 - The mobile app is Expo Go (foreground-only, ~50 Hz), not the bare-RN native
   TurboModule (background, 100 Hz) that `docs/ARCHITECTURE.md` targets.
-- `ml/` and `infra/` are documentation/scaffold only — they need external
-  tooling/services not available in this repo.
+- `infra/` is documentation/scaffold only — needs external services not
+  available in this repo. `ml/` now has a working training/export pipeline
+  (see `ml/README.md`), but its only model (`mlp-v1-synthetic`) is trained on
+  synthetic, physically-parameterised sensor windows, not real recorded
+  drives — `ml/replay/` (the real-drive regression harness) doesn't exist
+  yet. The app runs this model via a pure-JS forward pass
+  (`packages/detector/src/model.ts`), not native TFLite — `react-native-fast-tflite`
+  can't run in Expo Go.
 - **Expo SDK 54 is pinned deliberately** (the pilot phone's Expo Go). Never
   hand-bump Expo/RN versions; use `expo install --fix`. See
   `apps/mobile/AGENTS.md`.

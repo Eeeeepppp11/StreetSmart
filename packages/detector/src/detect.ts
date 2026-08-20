@@ -6,7 +6,7 @@ import type {
   ISODateString,
   Uuid,
 } from "@potholeproof/shared-types";
-import { extractFeatures } from "./features.js";
+import { extractFeatures, type JoltFeatures } from "./features.js";
 import { classify, type DetectionResult } from "./classify.js";
 import type { DetectorConfig } from "./config.js";
 import { DEFAULT_CONFIG } from "./config.js";
@@ -29,6 +29,12 @@ export interface GpsFix {
 export interface PipelineDeps {
   nextId: () => Uuid;
   modelVersion: string;
+  /** Swaps the classification step — defaults to the Phase-1 heuristic ({@link classify}) if omitted. */
+  classify?: (
+    features: JoltFeatures,
+    speedMps: number,
+    config: DetectorConfig
+  ) => DetectionResult;
 }
 
 /** Nearest GPS fix to a given time (used to locate an event). */
@@ -91,7 +97,8 @@ export function emitForPeak(
   const fix = nearestFix(gps, peakT);
   if (!fix) return null;
   if (fix.speedMps < config.minEmitSpeedMps) return null; // parked/hand-held
-  const res = classify(extractFeatures(window), fix.speedMps, config);
+  const classifier = deps.classify ?? classify;
+  const res = classifier(extractFeatures(window), fix.speedMps, config);
   if (res.classification === "other" || res.confidence < config.minConfidence) {
     return null;
   }
