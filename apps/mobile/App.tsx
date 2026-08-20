@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
@@ -20,6 +21,10 @@ import * as Speech from "expo-speech";
 import { DetectionPipeline, makeSamples } from "@potholeproof/detector";
 import type { GpsFix } from "@potholeproof/detector";
 import type { JoltEvent, LatLng, SensorSample, Vec3 } from "@potholeproof/shared-types";
+import { useAuth } from "./auth/AuthContext";
+import SignInScreen from "./screens/SignInScreen";
+import SideNavbar from "./components/SideNavbar";
+import { deleteDriveFromCloud, syncDriveToCloud, upsertUserProfile } from "./cloudDrives";
 
 const G = 9.81; // expo-sensors accelerometer reports g-force incl. gravity
 const SENSOR_INTERVAL_MS = 20; // request ~50 Hz
@@ -65,6 +70,17 @@ interface ServerTrainingRow {
   classification: string;
   modelVersion: string;
   label: Label | null;
+}
+
+/** Cloud sync should never silently fail — surface real errors while we're bringing this up. */
+function syncCloud(label: string, fn: () => Promise<void>) {
+  fn().catch((err: unknown) => {
+    console.error(`[cloud] ${label} failed:`, err);
+    Alert.alert(
+      `Cloud sync failed (${label})`,
+      String((err as { message?: string })?.message ?? err)
+    );
+  });
 }
 
 function isLabeledEvent(x: unknown): x is LabeledEvent {
@@ -135,6 +151,8 @@ function buildDemoDrive(): { samples: SensorSample[]; gps: GpsFix[] } {
 }
 
 export default function App() {
+  const { user, initializing, logOut } = useAuth();
+  const [navOpen, setNavOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [isDemo, setIsDemo] = useState(false);
   const [events, setEvents] = useState<JoltEvent[]>([]);
@@ -152,6 +170,7 @@ export default function App() {
   const [importText, setImportText] = useState("");
   const [importingFromServer, setImportingFromServer] = useState(false);
   const [routePoints, setRoutePoints] = useState<LatLng[]>([]);
+  const [syncingAll, setSyncingAll] = useState(false);
 
   const pipeline = useRef<DetectionPipeline | null>(null);
   const liveLabels = useRef<Record<string, Label>>({});
@@ -177,6 +196,25 @@ export default function App() {
       (raw) => raw && setSavedCount((JSON.parse(raw) as unknown[]).length)
     );
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      syncCloud("profile", () => upsertUserProfile(user.uid, user.email, user.displayName));
+    }
+  }, [user]);
+
+  if (initializing) {
+    return (
+      <View style={[styles.screen, styles.centerFill]}>
+        <StatusBar style="dark" />
+        <ActivityIndicator size="large" color="#e8442e" />
+      </View>
+    );
+  }
+
+  if (!user) {
+    return <SignInScreen />;
+  }
 
   function freshPipeline() {
     pipeline.current = new DetectionPipeline({
@@ -372,6 +410,16 @@ export default function App() {
     const merged = [...existing, ...labeled];
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
     await saveRoute(driveIdRef.current, routeRef.current);
+    if (user && labeled.length > 0) {
+      syncCloud("save drive", () =>
+        syncDriveToCloud(
+          user.uid,
+          driveIdRef.current,
+          labeled.map((l) => ({ event: l.event, label: l.label })),
+          routeRef.current
+        )
+      );
+    }
     setSavedCount(merged.length);
     setEvents([]);
     setLabels({});
@@ -487,6 +535,45 @@ export default function App() {
     setPhase("library");
   }
 
+  /** Backfill every drive already on this phone up to Firestore — for data saved before cloud sync existed. */
+  async function syncAllToCloud() {
+    if (!user) return;
+    setSyncingAll(true);
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      const all: LabeledEvent[] = raw ? JSON.parse(raw) : [];
+      if (all.length === 0) {
+        Alert.alert("Nothing to sync", "No labeled events stored on this phone yet.");
+        return;
+      }
+      const groups = groupLibraryByDrive(all);
+      const routes = await loadRoutes();
+      let ok = 0;
+      const failures: string[] = [];
+      for (const group of groups) {
+        try {
+          await syncDriveToCloud(
+            user.uid,
+            group.driveId,
+            group.items.map((l) => ({ event: l.event, label: l.label })),
+            routes[group.driveId] ?? []
+          );
+          ok++;
+        } catch (err) {
+          console.error(`[cloud] backfill of drive ${group.driveId} failed:`, err);
+          failures.push(String((err as { message?: string })?.message ?? err));
+        }
+      }
+      Alert.alert(
+        "Cloud sync",
+        `${ok} of ${groups.length} drive${groups.length === 1 ? "" : "s"} synced to Firestore.` +
+          (failures.length > 0 ? `\n\nFirst error: ${failures[0]}` : "")
+      );
+    } finally {
+      setSyncingAll(false);
+    }
+  }
+
   async function persistLibrary(next: LabeledEvent[]) {
     setLibrary(next);
     setSavedCount(next.length);
@@ -513,6 +600,7 @@ export default function App() {
       delete routes[driveId];
       await AsyncStorage.setItem(ROUTES_KEY, JSON.stringify(routes));
     }
+    if (user) syncCloud("delete drive", () => deleteDriveFromCloud(user.uid, driveId));
   }
 
   /** Reopen a saved drive on the review screen, in edit mode. */
@@ -549,6 +637,20 @@ export default function App() {
       .map((e) => ({ event: e, label: labels[e.id]!, driveId: editingDriveId }));
     const others = library.filter((l) => driveKeyOf(l) !== editingDriveId);
     await persistLibrary([...others, ...updated]);
+    if (user) {
+      if (updated.length > 0) {
+        syncCloud("save drive", () =>
+          syncDriveToCloud(
+            user.uid,
+            editingDriveId,
+            updated.map((l) => ({ event: l.event, label: l.label })),
+            routePoints
+          )
+        );
+      } else {
+        syncCloud("delete drive", () => deleteDriveFromCloud(user.uid, editingDriveId));
+      }
+    }
     setEditingDriveId(null);
     setEvents([]);
     setLabels({});
@@ -876,12 +978,29 @@ export default function App() {
   return (
     <View style={[styles.screen, styles.homeScreen]}>
       <StatusBar style="dark" />
+      <SideNavbar
+        visible={navOpen}
+        onClose={() => setNavOpen(false)}
+        displayName={user.displayName}
+        email={user.email}
+        savedCount={savedCount ?? 0}
+        onStartDrive={startDrive}
+        onOpenLibrary={openLibrary}
+        onLogOut={logOut}
+      />
       <ScrollView
         style={styles.homeScroll}
         contentContainerStyle={styles.homeContent}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.homeHeader}>
+          <Pressable
+            style={styles.menuBtn}
+            onPress={() => setNavOpen(true)}
+            hitSlop={10}
+          >
+            <Text style={styles.menuBtnText}>☰</Text>
+          </Pressable>
           <Text style={styles.homeTitle}>PotholeProof</Text>
           <Text style={styles.homeTagline}>Every commute is a road survey.</Text>
         </View>
@@ -913,88 +1032,15 @@ export default function App() {
             <Text style={styles.rowBtnChevron}>›</Text>
           </Pressable>
           <View style={styles.divider} />
-          <Pressable style={styles.rowBtn} onPress={exportTrainingData}>
-            <Text style={styles.rowBtnText}>⇪ Export training data</Text>
-            <Text style={styles.rowBtnChevron}>›</Text>
-          </Pressable>
-          <View style={styles.divider} />
           <Pressable
             style={styles.rowBtn}
-            onPress={() => setShowImportBox((v) => !v)}
+            onPress={syncAllToCloud}
+            disabled={syncingAll}
           >
-            <Text style={styles.rowBtnText}>⇩ Import training data</Text>
-            <Text style={styles.rowBtnChevron}>{showImportBox ? "︿" : "›"}</Text>
-          </Pressable>
-          {showImportBox && (
-            <View style={styles.importBox}>
-              <TextInput
-                style={styles.importInput}
-                placeholder="Paste the JSON from Export training data here"
-                placeholderTextColor="#9aa3ad"
-                autoCapitalize="none"
-                autoCorrect={false}
-                multiline
-                value={importText}
-                onChangeText={setImportText}
-              />
-              <View style={styles.importActions}>
-                <Pressable
-                  style={styles.importCancelBtn}
-                  onPress={() => {
-                    setShowImportBox(false);
-                    setImportText("");
-                  }}
-                >
-                  <Text style={styles.importCancelText}>Cancel</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.importBtn, !importText.trim() && styles.uploadBtnDisabled]}
-                  onPress={importTrainingData}
-                  disabled={!importText.trim()}
-                >
-                  <Text style={styles.uploadBtnText}>Import</Text>
-                </Pressable>
-              </View>
-              <View style={styles.importDividerRow}>
-                <View style={styles.importDividerLine} />
-                <Text style={styles.importDividerText}>or</Text>
-                <View style={styles.importDividerLine} />
-              </View>
-              <Pressable
-                style={[styles.demoBtn, importingFromServer && styles.uploadBtnDisabled]}
-                onPress={importFromServer}
-                disabled={importingFromServer}
-              >
-                <Text style={styles.demoBtnText}>
-                  {importingFromServer
-                    ? "Pulling…"
-                    : "⇩ Pull labeled data from server"}
-                </Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Upload to server</Text>
-          <TextInput
-            style={styles.urlInput}
-            placeholder="server URL, e.g. http://192.168.1.20:4477"
-            placeholderTextColor="#9aa3ad"
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            value={serverUrl}
-            onChangeText={setServerUrl}
-          />
-          <Pressable
-            style={[styles.uploadBtn, uploading && styles.uploadBtnDisabled]}
-            onPress={uploadToServer}
-            disabled={uploading}
-          >
-            <Text style={styles.uploadBtnText}>
-              {uploading ? "Uploading…" : "Upload to server"}
+            <Text style={styles.rowBtnText}>
+              {syncingAll ? "Syncing…" : "☁ Sync saved drives to cloud"}
             </Text>
+            <Text style={styles.rowBtnChevron}>›</Text>
           </Pressable>
         </View>
 
@@ -1013,6 +1059,7 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: 72,
   },
+  centerFill: { padding: 0, paddingTop: 0 },
   driveScreen: { backgroundColor: "#101317" },
   h1: { fontSize: 32, fontWeight: "800", color: "#1a1d21" },
   backRow: { alignSelf: "flex-start", paddingVertical: 6, marginBottom: 2 },
@@ -1028,6 +1075,17 @@ const styles = StyleSheet.create({
   homeScroll: { flex: 1, alignSelf: "stretch" },
   homeContent: { paddingHorizontal: 20, paddingTop: 48, paddingBottom: 40 },
   homeHeader: { marginBottom: 20 },
+  menuBtn: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
+  },
+  menuBtnText: { fontSize: 24, color: "#1a1d21" },
   homeTitle: { fontSize: 34, fontWeight: "800", color: "#1a1d21" },
   homeTagline: { fontSize: 15, color: "#5b6570", marginTop: 4 },
   heroGroup: { marginBottom: 24 },
