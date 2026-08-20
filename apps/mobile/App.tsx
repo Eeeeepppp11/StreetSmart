@@ -149,32 +149,76 @@ function pinColor(e: JoltEvent): string {
   return "#8a939d";
 }
 
-/** A ~35s simulated drive: real detector, synthetic road. */
+/**
+ * Piecewise-linear speed profile, m/s, with keyframes at [ms, speed]. Models a
+ * real local drive: pull away → residential cruise → stop → pull away again →
+ * ramp onto an arterial → highway-ish cruise → slow to arrival.
+ */
+function speedAtKeyframes(tMs: number, keyframes: [number, number][]): number {
+  for (let i = 0; i < keyframes.length - 1; i++) {
+    const [t0, s0] = keyframes[i]!;
+    const [t1, s1] = keyframes[i + 1]!;
+    if (tMs >= t0 && tMs <= t1) {
+      const f = t1 === t0 ? 0 : (tMs - t0) / (t1 - t0);
+      return s0 + (s1 - s0) * f;
+    }
+  }
+  return keyframes[keyframes.length - 1]![1];
+}
+
+const DEMO_SPEED_KEYFRAMES: [number, number][] = [
+  [0, 1], // stopped at the curb
+  [3000, 8], // pulling away, residential
+  [10000, 8], // residential cruise, ~18 mph
+  [13000, 3], // slowing for a stop sign
+  [16000, 8], // pulling away again
+  [26000, 21], // ramping onto an arterial, ~47 mph
+  [38000, 21], // arterial/highway-ish cruise
+  [50000, 3], // slowing into the destination neighborhood
+];
+
+function demoSpeedAt(tMs: number): number {
+  const wobble = Math.sin(tMs / 1000) * 0.6; // small natural speed wobble
+  return Math.max(0.5, speedAtKeyframes(tMs, DEMO_SPEED_KEYFRAMES) + wobble);
+}
+
+/** A ~50s simulated drive through Bellevue, WA 98005: real detector, varied
+ *  speed profile, synthetic road covering a broad range of situations. */
 function buildDemoDrive(): { samples: SensorSample[]; gps: GpsFix[] } {
+  const DURATION_MS = 50000;
   const samples = makeSamples({
-    durationMs: 35000,
+    durationMs: DURATION_MS,
     rateHz: 50,
     noise: 0.35,
     gyroNoise: 0.03,
     seed: 7,
     impulses: [
-      { atMs: 6000, peak: 11, kind: "sharp" }, // pothole
-      { atMs: 13000, peak: 7, kind: "rounded", gyroPeak: 1.2 }, // speed bump
-      { atMs: 20000, peak: 8.5, kind: "sharp" }, // moderate pothole
-      { atMs: 29000, peak: 14, kind: "sharp" }, // severe pothole
+      { atMs: 2000, peak: 3, kind: "rounded", widthMs: 150 }, // ambiguous jiggle, pulling away
+      { atMs: 6500, peak: 10, kind: "sharp" }, // pothole, residential
+      { atMs: 9000, peak: 7, kind: "rounded", gyroPeak: 1.3 }, // speed bump, residential
+      { atMs: 14500, peak: 8, kind: "sharp" }, // pothole while slowed for the stop sign
+      { atMs: 20000, peak: 6.5, kind: "rounded", widthMs: 260, gyroPeak: 1.0 }, // speed bump, pulling away
+      { atMs: 28000, peak: 13, kind: "sharp" }, // moderate pothole, ramping onto the arterial
+      { atMs: 33000, peak: 6, kind: "rounded", widthMs: 340 }, // rough patch, no clean impulse
+      { atMs: 40000, peak: 19, kind: "sharp" }, // severe pothole at highway-ish speed
+      { atMs: 45000, peak: 8, kind: "rounded", gyroPeak: 1.8 }, // speed bump, still fast
+      { atMs: 48000, peak: 6, kind: "sharp" }, // small pothole, arriving
     ],
   });
-  const base = { lat: 37.7749, lng: -122.4194 };
-  const speed = 13.4; // ~30 mph northbound
+  // West Bellevue, WA (zip 98005).
+  const base = { lat: 47.6101, lng: -122.173 };
   const gps: GpsFix[] = [];
-  for (let t = 0; t <= 35000; t += 1000) {
+  let lat = base.lat;
+  for (let t = 0; t <= DURATION_MS; t += 1000) {
+    const speedMps = demoSpeedAt(t);
     gps.push({
       t,
       capturedAt: new Date(1_760_000_000_000 + t).toISOString(),
-      location: { lat: base.lat + (speed * (t / 1000)) / 111320, lng: base.lng },
-      speedMps: speed,
+      location: { lat, lng: base.lng },
+      speedMps,
       heading: 0,
     });
+    lat += speedMps / 111320; // integrate position over this 1s step
   }
   return { samples, gps };
 }
