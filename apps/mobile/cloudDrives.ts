@@ -9,12 +9,22 @@ export interface CloudLabeledEvent {
   label: CloudLabel;
 }
 
+/** Shape of a document read back from the `drives` collection (e.g. by the admin screen). */
+export interface CloudDrive {
+  id: string;
+  driveId: string;
+  uid: string;
+  items: CloudLabeledEvent[];
+  route: LatLng[];
+  updatedAt: { toMillis?: () => number } | null;
+}
+
 /**
  * All drives live in one top-level collection (community-visible), each doc
  * owned by the `uid` that created it. Doc id is namespaced by uid so two
  * users' locally-generated driveIds (`drive-${Date.now()}`) can never collide.
  */
-const DRIVES_COLLECTION = "drives";
+export const DRIVES_COLLECTION = "drives";
 
 function cloudDocId(uid: string, driveId: string): string {
   return `${uid}_${driveId}`;

@@ -23,7 +23,9 @@ import type { GpsFix } from "@potholeproof/detector";
 import type { JoltEvent, LatLng, SensorSample, Vec3 } from "@potholeproof/shared-types";
 import { useAuth } from "./auth/AuthContext";
 import SignInScreen from "./screens/SignInScreen";
+import AdminScreen from "./screens/AdminScreen";
 import SideNavbar from "./components/SideNavbar";
+import { isAdminEmail } from "./adminAuth";
 import { deleteDriveFromCloud, syncDriveToCloud, upsertUserProfile } from "./cloudDrives";
 
 const G = 9.81; // expo-sensors accelerometer reports g-force incl. gravity
@@ -44,7 +46,7 @@ interface LabeledEvent {
   driveId?: string;
 }
 
-type Phase = "idle" | "driving" | "review" | "library";
+type Phase = "idle" | "driving" | "review" | "library" | "admin";
 
 /** Stable grouping key — falls back to the capture date for data saved before driveId existed. */
 function driveKeyOf(item: LabeledEvent): string {
@@ -934,6 +936,10 @@ export default function App() {
     );
   }
 
+  if (phase === "admin") {
+    return <AdminScreen onClose={() => setPhase("idle")} />;
+  }
+
   if (phase === "driving") {
     return (
       <View style={[styles.screen, styles.driveScreen]}>
@@ -984,8 +990,10 @@ export default function App() {
         displayName={user.displayName}
         email={user.email}
         savedCount={savedCount ?? 0}
+        isAdmin={isAdminEmail(user.email)}
         onStartDrive={startDrive}
         onOpenLibrary={openLibrary}
+        onOpenAdmin={() => setPhase("admin")}
         onLogOut={logOut}
       />
       <ScrollView

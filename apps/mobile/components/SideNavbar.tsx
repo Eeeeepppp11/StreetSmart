@@ -9,8 +9,10 @@ interface SideNavbarProps {
   displayName: string | null;
   email: string | null;
   savedCount: number;
+  isAdmin: boolean;
   onStartDrive: () => void;
   onOpenLibrary: () => void;
+  onOpenAdmin: () => void;
   onLogOut: () => void;
 }
 
@@ -20,8 +22,10 @@ export default function SideNavbar({
   displayName,
   email,
   savedCount,
+  isAdmin,
   onStartDrive,
   onOpenLibrary,
+  onOpenAdmin,
   onLogOut,
 }: SideNavbarProps) {
   const slide = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
@@ -98,6 +102,19 @@ export default function SideNavbar({
             <Text style={styles.navIcon}>📂</Text>
             <Text style={styles.navLabel}>Saved data</Text>
           </Pressable>
+
+          {isAdmin && (
+            <Pressable
+              style={styles.navItem}
+              onPress={() => {
+                onClose();
+                onOpenAdmin();
+              }}
+            >
+              <Text style={styles.navIcon}>📊</Text>
+              <Text style={styles.navLabel}>Admin dashboard</Text>
+            </Pressable>
+          )}
 
           <View style={styles.spacer} />
 
