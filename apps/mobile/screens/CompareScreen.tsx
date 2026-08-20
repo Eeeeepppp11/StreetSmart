@@ -15,37 +15,79 @@ const LABEL_DISPLAY: Record<string, string> = {
   other: "Other",
 };
 
-/** A ~40s synthetic drive with deliberately varied/borderline hits, so the
- *  heuristic and the trained model are likely to actually disagree somewhere —
- *  that's the interesting case this lab exists to surface. */
+/** Piecewise-linear speed profile, m/s, keyframes as [ms, speed]. */
+function speedAtKeyframes(tMs: number, keyframes: [number, number][]): number {
+  for (let i = 0; i < keyframes.length - 1; i++) {
+    const [t0, s0] = keyframes[i]!;
+    const [t1, s1] = keyframes[i + 1]!;
+    if (tMs >= t0 && tMs <= t1) {
+      const f = t1 === t0 ? 0 : (tMs - t0) / (t1 - t0);
+      return s0 + (s1 - s0) * f;
+    }
+  }
+  return keyframes[keyframes.length - 1]![1];
+}
+
+/** Deliberately covers a broad speed range (~4-54 mph) — severity normalises
+ *  against speed, so this stresses the heuristic/model boundary differently
+ *  at low, cruising, and highway-ish speeds, not just one fixed speed. */
+const LAB_SPEED_KEYFRAMES: [number, number][] = [
+  [0, 2],
+  [3000, 6], // slow residential
+  [9000, 6],
+  [12000, 14], // accelerating
+  [18000, 14], // suburban cruise, ~31 mph
+  [22000, 3], // slowing for a turn
+  [26000, 14], // resuming
+  [34000, 24], // ramping onto the highway, ~54 mph
+  [44000, 24], // highway cruise
+  [48000, 8], // slowing to arrival
+];
+
+function labSpeedAt(tMs: number): number {
+  const wobble = Math.sin(tMs / 900) * 0.5;
+  return Math.max(0.5, speedAtKeyframes(tMs, LAB_SPEED_KEYFRAMES) + wobble);
+}
+
+/** A ~48s synthetic drive through Bellevue, WA 98005, with deliberately
+ *  varied/borderline hits across a broad speed range, so the heuristic and
+ *  the trained model are likely to actually disagree somewhere — that's the
+ *  interesting case this lab exists to surface. */
 function buildLabDrive(): { samples: ReturnType<typeof makeSamples>; gps: GpsFix[] } {
+  const DURATION_MS = 48000;
   const samples = makeSamples({
-    durationMs: 40000,
+    durationMs: DURATION_MS,
     rateHz: 50,
     noise: 0.3,
     gyroNoise: 0.04,
     seed: 42,
     impulses: [
-      { atMs: 4000, peak: 12, kind: "sharp", widthMs: 35 }, // clean pothole
-      { atMs: 9000, peak: 7, kind: "rounded", widthMs: 320, gyroPeak: 1.5 }, // clean speed bump
-      { atMs: 14000, peak: 6, kind: "sharp", widthMs: 60, gyroPeak: 0.3 }, // borderline: sharp but some rotation
-      { atMs: 19000, peak: 16, kind: "sharp", widthMs: 30 }, // severe pothole
-      { atMs: 24000, peak: 5, kind: "rounded", widthMs: 130, gyroPeak: 0.4 }, // borderline: short rounded hump
-      { atMs: 29000, peak: 9, kind: "rounded", widthMs: 380, gyroPeak: 2.1 }, // clean speed bump
-      { atMs: 34000, peak: 5.5, kind: "sharp", widthMs: 90 }, // borderline: soft/wide "sharp"
+      { atMs: 3500, peak: 8, kind: "sharp", widthMs: 35 }, // clean pothole, slow residential
+      { atMs: 7000, peak: 6.5, kind: "rounded", widthMs: 300, gyroPeak: 1.4 }, // clean speed bump, slow
+      { atMs: 10500, peak: 6, kind: "sharp", widthMs: 60, gyroPeak: 0.3 }, // borderline: sharp but some rotation
+      { atMs: 15000, peak: 16, kind: "sharp", widthMs: 30 }, // severe pothole, cruising
+      { atMs: 19500, peak: 5, kind: "rounded", widthMs: 130, gyroPeak: 0.4 }, // borderline: short rounded hump, slowing for a turn
+      { atMs: 24000, peak: 9, kind: "rounded", widthMs: 380, gyroPeak: 2.1 }, // clean speed bump, resuming
+      { atMs: 30000, peak: 5.5, kind: "sharp", widthMs: 90 }, // borderline: soft/wide "sharp", cruising
+      { atMs: 37000, peak: 20, kind: "sharp", widthMs: 28 }, // severe pothole at highway-ish speed
+      { atMs: 41000, peak: 8, kind: "rounded", widthMs: 300, gyroPeak: 1.7 }, // speed bump, still fast
+      { atMs: 46000, peak: 6, kind: "sharp", widthMs: 45 }, // pothole, slowing to arrival
     ],
   });
-  const base = { lat: 37.7749, lng: -122.4194 };
-  const speed = 13.4;
+  // West Bellevue, WA (zip 98005).
+  const base = { lat: 47.6101, lng: -122.173 };
   const gps: GpsFix[] = [];
-  for (let t = 0; t <= 40000; t += 1000) {
+  let lat = base.lat;
+  for (let t = 0; t <= DURATION_MS; t += 1000) {
+    const speedMps = labSpeedAt(t);
     gps.push({
       t,
       capturedAt: new Date(1_760_000_000_000 + t).toISOString(),
-      location: { lat: base.lat + (speed * (t / 1000)) / 111320, lng: base.lng },
-      speedMps: speed,
+      location: { lat, lng: base.lng },
+      speedMps,
       heading: 0,
     });
+    lat += speedMps / 111320;
   }
   return { samples, gps };
 }
