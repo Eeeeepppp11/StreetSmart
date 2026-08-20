@@ -3,7 +3,11 @@
   "version": "0.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@expo/vector-icons": "^15.0.3",
+    "@potholeproof/alert-settings": "workspace:*",
     "@potholeproof/detector": "workspace:*",
+    "@potholeproof/geo": "workspace:*",
+    "@potholeproof/routing": "workspace:*",
     "@potholeproof/shared-types": "workspace:*",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~54.0.35",
@@ -14,11 +18,13 @@
     "firebase": "^12.18.0",
     "react": "19.1.0",
     "react-native": "0.81.5",
-    "react-native-maps": "1.20.1"
+    "react-native-maps": "1.20.1",
+    "text-encoding": "^0.7.0"
   },
   "devDependencies": {
     "@expo/ngrok": "^4.1.0",
     "@types/react": "~19.1.17",
+    "@types/text-encoding": "^0.0.40",
     "typescript": "~5.9.3"
   },
   "scripts": {

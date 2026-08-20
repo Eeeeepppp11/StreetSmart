@@ -10,7 +10,8 @@ interface SideNavbarProps {
   email: string | null;
   contributedCount: number;
   isAdmin: boolean;
-  onStartDrive: () => void;
+  onNavigate: () => void;
+  onContribute: () => void;
   onOpenLibrary: () => void;
   onOpenAdmin: () => void;
   onLogOut: () => void;
@@ -23,7 +24,8 @@ export default function SideNavbar({
   email,
   contributedCount,
   isAdmin,
-  onStartDrive,
+  onNavigate,
+  onContribute,
   onOpenLibrary,
   onOpenAdmin,
   onLogOut,
@@ -85,11 +87,22 @@ export default function SideNavbar({
             style={styles.navItem}
             onPress={() => {
               onClose();
-              onStartDrive();
+              onNavigate();
             }}
           >
-            <Text style={styles.navIcon}>🚗</Text>
-            <Text style={styles.navLabel}>Start drive</Text>
+            <Text style={styles.navIcon}>🧭</Text>
+            <Text style={styles.navLabel}>Start Navigation</Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.navItem}
+            onPress={() => {
+              onClose();
+              onContribute();
+            }}
+          >
+            <Text style={styles.navIcon}>🚧</Text>
+            <Text style={styles.navLabel}>Survey Roads</Text>
           </Pressable>
 
           <Pressable
