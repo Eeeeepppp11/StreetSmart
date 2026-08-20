@@ -12,3 +12,7 @@ export { replayDrive } from "./replay.js";
 export type { SynthImpulse, SynthOptions } from "./synth.js";
 export { makeSamples } from "./synth.js";
 export { classifyWithModel, runModel, MODEL_VERSION as ML_MODEL_VERSION } from "./model.js";
+export type { ClassMetric, ModelMetrics } from "./model.metrics.js";
+export { MODEL_METRICS } from "./model.metrics.js";
+export type { ClassifierComparison } from "./compare.js";
+export { compareClassifiers } from "./compare.js";

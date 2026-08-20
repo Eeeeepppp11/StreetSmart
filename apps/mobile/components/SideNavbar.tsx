@@ -14,6 +14,7 @@ interface SideNavbarProps {
   onContribute: () => void;
   onOpenLibrary: () => void;
   onOpenAdmin: () => void;
+  onOpenModelInfo: () => void;
   onLogOut: () => void;
 }
 
@@ -28,6 +29,7 @@ export default function SideNavbar({
   onContribute,
   onOpenLibrary,
   onOpenAdmin,
+  onOpenModelInfo,
   onLogOut,
 }: SideNavbarProps) {
   const slide = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
@@ -114,6 +116,17 @@ export default function SideNavbar({
           >
             <Text style={styles.navIcon}>📂</Text>
             <Text style={styles.navLabel}>Saved data</Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.navItem}
+            onPress={() => {
+              onClose();
+              onOpenModelInfo();
+            }}
+          >
+            <Text style={styles.navIcon}>🤖</Text>
+            <Text style={styles.navLabel}>How the AI works</Text>
           </Pressable>
 
           {isAdmin && (

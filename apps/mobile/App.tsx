@@ -18,13 +18,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { Accelerometer, Gyroscope } from "expo-sensors";
 import * as Speech from "expo-speech";
-import { DetectionPipeline, makeSamples } from "@potholeproof/detector";
+import { DetectionPipeline, makeSamples, classifyWithModel } from "@potholeproof/detector";
 import type { GpsFix } from "@potholeproof/detector";
 import type { JoltEvent, LatLng, SensorSample, Vec3 } from "@potholeproof/shared-types";
 import { useAuth } from "./auth/AuthContext";
 import SignInScreen from "./screens/SignInScreen";
 import AdminScreen from "./screens/AdminScreen";
 import NavigateScreen from "./screens/NavigateScreen";
+import ModelInfoScreen from "./screens/ModelInfoScreen";
+import CompareScreen from "./screens/CompareScreen";
 import SideNavbar from "./components/SideNavbar";
 import { isAdminEmail } from "./adminAuth";
 import {
@@ -40,7 +42,11 @@ const SENSOR_INTERVAL_MS = 20; // request ~50 Hz
 const DRAIN_INTERVAL_MS = 300;
 const SERVER_KEY = "pp.server.url";
 const ANON_KEY = "pp.anon.id";
-const MODEL_VERSION = "heuristic-v0-expo";
+// Small MLP trained on synthetic, physically-parameterised sensor windows
+// (packages/detector/src/scripts/gen-training-data.ts). Runs as a pure-JS
+// forward pass (packages/detector/src/model.ts) since native TFLite can't
+// run in Expo Go. See the in-app "How the AI works" screen for real metrics.
+const MODEL_VERSION = "mlp-v1-synthetic";
 const APP_VERSION = "0.2.0";
 
 /** Local storage is namespaced per-account so switching accounts on one phone never leaks another user's cached data. */
@@ -59,7 +65,15 @@ interface LabeledEvent {
   driveId?: string;
 }
 
-type Phase = "idle" | "driving" | "review" | "library" | "admin" | "navigate";
+type Phase =
+  | "idle"
+  | "driving"
+  | "review"
+  | "library"
+  | "admin"
+  | "navigate"
+  | "modelInfo"
+  | "compare";
 
 /** Stable grouping key — falls back to the capture date for data saved before driveId existed. */
 function driveKeyOf(item: LabeledEvent): string {
@@ -245,6 +259,7 @@ export default function App() {
     pipeline.current = new DetectionPipeline({
       nextId: () => `evt-${Date.now()}-${++seq.current}`,
       modelVersion: MODEL_VERSION,
+      classify: classifyWithModel,
     });
     buffer.current = [];
     liveLabels.current = {};
@@ -873,9 +888,19 @@ export default function App() {
                 </View>
                 <Text style={styles.cardMeta}>
                   {new Date(item.capturedAt).toLocaleTimeString()} ·{" "}
-                  {(item.speedMps * 2.237).toFixed(0)} mph ·{" "}
-                  {Math.round(item.confidence * 100)}% confidence
+                  {(item.speedMps * 2.237).toFixed(0)} mph
                 </Text>
+                <View style={styles.aiRow}>
+                  <View style={styles.aiBadge}>
+                    <Text style={styles.aiBadgeText}>🤖 {item.modelVersion}</Text>
+                  </View>
+                  <View style={styles.confidenceBarTrack}>
+                    <View
+                      style={[styles.confidenceBarFill, { width: `${Math.round(item.confidence * 100)}%` }]}
+                    />
+                  </View>
+                  <Text style={styles.confidencePct}>{Math.round(item.confidence * 100)}%</Text>
+                </View>
                 {!isDemo && (
                   <View style={styles.row}>
                     <Pressable
@@ -974,6 +999,16 @@ export default function App() {
     return <NavigateScreen onClose={() => setPhase("idle")} />;
   }
 
+  if (phase === "modelInfo") {
+    return (
+      <ModelInfoScreen onClose={() => setPhase("idle")} onOpenLab={() => setPhase("compare")} />
+    );
+  }
+
+  if (phase === "compare") {
+    return <CompareScreen onClose={() => setPhase("modelInfo")} />;
+  }
+
   if (phase === "driving") {
     return (
       <View style={[styles.screen, styles.driveScreen]}>
@@ -1004,6 +1039,9 @@ export default function App() {
         </Text>
         {pendingConfirm && (
           <Pressable style={styles.confirmOverlay} onPress={confirmPothole}>
+            <Text style={styles.confirmAiBadge}>
+              🤖 AI · {Math.round(pendingConfirm.confidence * 100)}% confident
+            </Text>
             <Text style={styles.confirmBig}>TAP = POTHOLE</Text>
             <Text style={styles.confirmSub}>
               {pendingConfirm.classification.replace("_", " ")} detected ·
@@ -1031,6 +1069,7 @@ export default function App() {
         onContribute={startDrive}
         onOpenLibrary={openLibrary}
         onOpenAdmin={() => setPhase("admin")}
+        onOpenModelInfo={() => setPhase("modelInfo")}
         onLogOut={logOut}
       />
       <ScrollView
@@ -1061,6 +1100,11 @@ export default function App() {
             <Text style={styles.demoBtnText}>▶ Demo drive (simulated)</Text>
           </Pressable>
         </View>
+
+        <Pressable style={styles.aiCallout} onPress={() => setPhase("modelInfo")}>
+          <Text style={styles.aiCalloutText}>🤖 Potholes are classified by a trained AI model</Text>
+          <Text style={styles.aiCalloutChevron}>›</Text>
+        </Pressable>
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionLabel}>Your data</Text>
@@ -1140,6 +1184,18 @@ const styles = StyleSheet.create({
   homeTitle: { fontSize: 34, fontWeight: "800", color: "#1a1d21" },
   homeTagline: { fontSize: 15, color: "#5b6570", marginTop: 4 },
   heroGroup: { marginBottom: 24 },
+  aiCallout: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#1a1d21",
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  aiCalloutText: { color: "#fff", fontSize: 14, fontWeight: "700", flex: 1 },
+  aiCalloutChevron: { color: "#8a939d", fontSize: 20 },
   sectionCard: {
     backgroundColor: "#fff",
     borderRadius: 16,
@@ -1263,6 +1319,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     zIndex: 10,
   },
+  confirmAiBadge: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    marginBottom: 14,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    overflow: "hidden",
+  },
   confirmBig: { color: "#fff", fontSize: 44, fontWeight: "900" },
   confirmSub: { color: "#fff", opacity: 0.9, marginTop: 10, fontSize: 15 },
   urlInput: {
@@ -1316,6 +1384,12 @@ const styles = StyleSheet.create({
   dot: { width: 10, height: 10, borderRadius: 5 },
   cardTitle: { fontSize: 16, fontWeight: "700", color: "#1a1d21" },
   cardMeta: { fontSize: 13, color: "#5b6570", marginTop: 2 },
+  aiRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
+  aiBadge: { backgroundColor: "#eef0f2", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  aiBadgeText: { fontSize: 11, fontWeight: "700", color: "#5b6570" },
+  confidenceBarTrack: { flex: 1, height: 5, borderRadius: 3, backgroundColor: "#eef0f2", overflow: "hidden" },
+  confidenceBarFill: { height: "100%", borderRadius: 3, backgroundColor: "#2e9e4f" },
+  confidencePct: { fontSize: 12, fontWeight: "700", color: "#5b6570", width: 34, textAlign: "right" },
   row: { flexDirection: "row", gap: 10, marginTop: 10 },
   labelBtn: {
     flex: 1,

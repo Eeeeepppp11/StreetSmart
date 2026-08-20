@@ -17,7 +17,7 @@ import * as Location from "expo-location";
 import { Accelerometer, Gyroscope } from "expo-sensors";
 import * as Speech from "expo-speech";
 import { Ionicons } from "@expo/vector-icons";
-import { DetectionPipeline } from "@potholeproof/detector";
+import { DetectionPipeline, classifyWithModel } from "@potholeproof/detector";
 import type { GpsFix } from "@potholeproof/detector";
 import {
   AlertBundler,
@@ -48,7 +48,7 @@ import type { NavRoute } from "../nav/types";
 const G = 9.81;
 const SENSOR_INTERVAL_MS = 20;
 const DRAIN_INTERVAL_MS = 300;
-const MODEL_VERSION = "heuristic-v0-expo";
+const MODEL_VERSION = "mlp-v1-synthetic";
 const ALERT_SETTINGS_KEY = "pp.nav.alertSettings.v1";
 
 const SENSITIVITY_OPTIONS: { value: AlertSensitivity; label: string }[] = [
@@ -234,6 +234,7 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
     pipeline.current = new DetectionPipeline({
       nextId: () => `nav-evt-${Date.now()}-${++seq.current}`,
       modelVersion: MODEL_VERSION,
+      classify: classifyWithModel,
     });
     bundler.current = new AlertBundler({ now: () => Date.now() }, alertSettingsRef.current);
     buffer.current = [];
