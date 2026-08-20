@@ -26,17 +26,29 @@ import SignInScreen from "./screens/SignInScreen";
 import AdminScreen from "./screens/AdminScreen";
 import SideNavbar from "./components/SideNavbar";
 import { isAdminEmail } from "./adminAuth";
-import { deleteDriveFromCloud, syncDriveToCloud, upsertUserProfile } from "./cloudDrives";
+import {
+  deleteDriveFromCloud,
+  subscribeToUserDrives,
+  syncDriveToCloud,
+  upsertUserProfile,
+  type CloudDrive,
+} from "./cloudDrives";
 
 const G = 9.81; // expo-sensors accelerometer reports g-force incl. gravity
 const SENSOR_INTERVAL_MS = 20; // request ~50 Hz
 const DRAIN_INTERVAL_MS = 300;
-const STORAGE_KEY = "pp.labeled.v1";
-const ROUTES_KEY = "pp.routes.v1";
 const SERVER_KEY = "pp.server.url";
 const ANON_KEY = "pp.anon.id";
 const MODEL_VERSION = "heuristic-v0-expo";
 const APP_VERSION = "0.2.0";
+
+/** Local storage is namespaced per-account so switching accounts on one phone never leaks another user's cached data. */
+function storageKeyFor(uid: string): string {
+  return `pp.labeled.v1.${uid}`;
+}
+function routesKeyFor(uid: string): string {
+  return `pp.routes.v1.${uid}`;
+}
 
 type Label = "pothole" | "not_pothole";
 interface LabeledEvent {
@@ -173,6 +185,7 @@ export default function App() {
   const [importingFromServer, setImportingFromServer] = useState(false);
   const [routePoints, setRoutePoints] = useState<LatLng[]>([]);
   const [syncingAll, setSyncingAll] = useState(false);
+  const [cloudDrives, setCloudDrives] = useState<CloudDrive[]>([]);
 
   const pipeline = useRef<DetectionPipeline | null>(null);
   const liveLabels = useRef<Record<string, Label>>({});
@@ -194,15 +207,20 @@ export default function App() {
 
   useEffect(() => {
     AsyncStorage.getItem(SERVER_KEY).then((v) => v && setServerUrl(v));
-    AsyncStorage.getItem(STORAGE_KEY).then(
-      (raw) => raw && setSavedCount((JSON.parse(raw) as unknown[]).length)
-    );
   }, []);
 
+  /** Local per-account count + live cloud subscription — both re-derive whenever the signed-in account changes. */
   useEffect(() => {
-    if (user) {
-      syncCloud("profile", () => upsertUserProfile(user.uid, user.email, user.displayName));
+    if (!user) {
+      setSavedCount(null);
+      setCloudDrives([]);
+      return;
     }
+    AsyncStorage.getItem(storageKeyFor(user.uid)).then((raw) =>
+      setSavedCount(raw ? (JSON.parse(raw) as unknown[]).length : 0)
+    );
+    syncCloud("profile", () => upsertUserProfile(user.uid, user.email, user.displayName));
+    return subscribeToUserDrives(user.uid, setCloudDrives);
   }, [user]);
 
   if (initializing) {
@@ -217,6 +235,10 @@ export default function App() {
   if (!user) {
     return <SignInScreen />;
   }
+
+  // A plain, never-null binding — TS doesn't carry `user`'s narrowing into the
+  // `function`-declaration closures below, but a `const string` needs none.
+  const uid = user.uid;
 
   function freshPipeline() {
     pipeline.current = new DetectionPipeline({
@@ -407,15 +429,15 @@ export default function App() {
     const labeled: LabeledEvent[] = events
       .filter((e) => labels[e.id])
       .map((e) => ({ event: e, label: labels[e.id]!, driveId: driveIdRef.current }));
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const raw = await AsyncStorage.getItem(storageKeyFor(uid));
     const existing: LabeledEvent[] = raw ? JSON.parse(raw) : [];
     const merged = [...existing, ...labeled];
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    await AsyncStorage.setItem(storageKeyFor(uid), JSON.stringify(merged));
     await saveRoute(driveIdRef.current, routeRef.current);
     if (user && labeled.length > 0) {
       syncCloud("save drive", () =>
         syncDriveToCloud(
-          user.uid,
+          uid,
           driveIdRef.current,
           labeled.map((l) => ({ event: l.event, label: l.label })),
           routeRef.current
@@ -429,7 +451,7 @@ export default function App() {
   }
 
   async function exportTrainingData() {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const raw = await AsyncStorage.getItem(storageKeyFor(uid));
     if (!raw || raw === "[]") {
       Alert.alert("Nothing yet", "Label some drives first.");
       return;
@@ -439,7 +461,7 @@ export default function App() {
 
   /** Merge incoming labeled events into local storage, deduped by event id. */
   async function mergeLabeledEvents(incoming: LabeledEvent[]): Promise<number> {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const raw = await AsyncStorage.getItem(storageKeyFor(uid));
     const existing: LabeledEvent[] = raw ? JSON.parse(raw) : [];
     const byId = new Map(existing.map((l) => [l.event.id, l]));
     let added = 0;
@@ -448,7 +470,7 @@ export default function App() {
       byId.set(item.event.id, item);
     }
     const merged = [...byId.values()];
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    await AsyncStorage.setItem(storageKeyFor(uid), JSON.stringify(merged));
     setSavedCount(merged.length);
     return added;
   }
@@ -531,9 +553,16 @@ export default function App() {
     }
   }
 
+  /** Merges this device's local cache with this account's cloud drives (from any device) into one editable list. */
   async function openLibrary() {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    setLibrary(raw ? (JSON.parse(raw) as LabeledEvent[]) : []);
+    const raw = await AsyncStorage.getItem(storageKeyFor(uid));
+    const local: LabeledEvent[] = raw ? JSON.parse(raw) : [];
+    const cloud: LabeledEvent[] = cloudDrives.flatMap((d) =>
+      d.items.map((it) => ({ event: it.event, label: it.label, driveId: d.driveId }))
+    );
+    const byId = new Map<string, LabeledEvent>();
+    for (const item of [...cloud, ...local]) byId.set(item.event.id, item);
+    setLibrary([...byId.values()]);
     setPhase("library");
   }
 
@@ -542,7 +571,7 @@ export default function App() {
     if (!user) return;
     setSyncingAll(true);
     try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      const raw = await AsyncStorage.getItem(storageKeyFor(uid));
       const all: LabeledEvent[] = raw ? JSON.parse(raw) : [];
       if (all.length === 0) {
         Alert.alert("Nothing to sync", "No labeled events stored on this phone yet.");
@@ -555,7 +584,7 @@ export default function App() {
       for (const group of groups) {
         try {
           await syncDriveToCloud(
-            user.uid,
+            uid,
             group.driveId,
             group.items.map((l) => ({ event: l.event, label: l.label })),
             routes[group.driveId] ?? []
@@ -579,12 +608,12 @@ export default function App() {
   async function persistLibrary(next: LabeledEvent[]) {
     setLibrary(next);
     setSavedCount(next.length);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    await AsyncStorage.setItem(storageKeyFor(uid), JSON.stringify(next));
   }
 
   /** Per-drive GPS tracks, stored locally only — never exported/uploaded. */
   async function loadRoutes(): Promise<Record<string, LatLng[]>> {
-    const raw = await AsyncStorage.getItem(ROUTES_KEY);
+    const raw = await AsyncStorage.getItem(routesKeyFor(uid));
     return raw ? JSON.parse(raw) : {};
   }
 
@@ -592,7 +621,7 @@ export default function App() {
     if (points.length < 2) return;
     const routes = await loadRoutes();
     routes[driveId] = points;
-    await AsyncStorage.setItem(ROUTES_KEY, JSON.stringify(routes));
+    await AsyncStorage.setItem(routesKeyFor(uid), JSON.stringify(routes));
   }
 
   async function deleteDrive(driveId: string) {
@@ -600,9 +629,9 @@ export default function App() {
     const routes = await loadRoutes();
     if (routes[driveId]) {
       delete routes[driveId];
-      await AsyncStorage.setItem(ROUTES_KEY, JSON.stringify(routes));
+      await AsyncStorage.setItem(routesKeyFor(uid), JSON.stringify(routes));
     }
-    if (user) syncCloud("delete drive", () => deleteDriveFromCloud(user.uid, driveId));
+    syncCloud("delete drive", () => deleteDriveFromCloud(uid, driveId));
   }
 
   /** Reopen a saved drive on the review screen, in edit mode. */
@@ -643,14 +672,14 @@ export default function App() {
       if (updated.length > 0) {
         syncCloud("save drive", () =>
           syncDriveToCloud(
-            user.uid,
+            uid,
             editingDriveId,
             updated.map((l) => ({ event: l.event, label: l.label })),
             routePoints
           )
         );
       } else {
-        syncCloud("delete drive", () => deleteDriveFromCloud(user.uid, editingDriveId));
+        syncCloud("delete drive", () => deleteDriveFromCloud(uid, editingDriveId));
       }
     }
     setEditingDriveId(null);
@@ -662,7 +691,7 @@ export default function App() {
   function clearSaved() {
     Alert.alert(
       "Delete all saved data?",
-      "Removes every labeled event stored on this phone. (Anything already uploaded stays on the server.)",
+      "Removes every labeled event cached on this phone. (Anything already synced to the cloud stays there.)",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -670,7 +699,7 @@ export default function App() {
           style: "destructive",
           onPress: () => {
             void persistLibrary([]);
-            void AsyncStorage.removeItem(ROUTES_KEY);
+            void AsyncStorage.removeItem(routesKeyFor(uid));
           },
         },
       ]
@@ -678,7 +707,7 @@ export default function App() {
   }
 
   async function uploadToServer() {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const raw = await AsyncStorage.getItem(storageKeyFor(uid));
     if (!raw || raw === "[]") {
       Alert.alert("Nothing yet", "Label some drives first.");
       return;
@@ -981,6 +1010,8 @@ export default function App() {
     );
   }
 
+  const cloudEventCount = cloudDrives.reduce((sum, d) => sum + d.items.length, 0);
+
   return (
     <View style={[styles.screen, styles.homeScreen]}>
       <StatusBar style="dark" />
@@ -989,7 +1020,7 @@ export default function App() {
         onClose={() => setNavOpen(false)}
         displayName={user.displayName}
         email={user.email}
-        savedCount={savedCount ?? 0}
+        contributedCount={cloudEventCount}
         isAdmin={isAdminEmail(user.email)}
         onStartDrive={startDrive}
         onOpenLibrary={openLibrary}
@@ -1025,15 +1056,18 @@ export default function App() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionLabel}>Your data</Text>
           <View style={styles.statRow}>
-            <Text style={[styles.statValue, !savedCount && styles.statValueEmpty]}>
-              {savedCount ?? 0}
+            <Text style={[styles.statValue, !cloudEventCount && styles.statValueEmpty]}>
+              {cloudEventCount}
             </Text>
             <Text style={styles.statCaption}>
-              {savedCount
-                ? "labeled events stored on this phone"
+              {cloudEventCount
+                ? "labeled events contributed"
                 : "No labeled events yet — drive to get started"}
             </Text>
           </View>
+          <Text style={styles.statBreakdown}>
+            {savedCount ?? 0} on this device · {cloudEventCount} synced to cloud
+          </Text>
           <View style={styles.divider} />
           <Pressable style={styles.rowBtn} onPress={openLibrary}>
             <Text style={styles.rowBtnText}>📂 Manage saved data</Text>
@@ -1119,6 +1153,7 @@ const styles = StyleSheet.create({
   statRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   statValue: { fontSize: 26, fontWeight: "800", color: "#2e9e4f" },
   statValueEmpty: { color: "#c3c9d0" },
+  statBreakdown: { fontSize: 12, color: "#8a939d", marginTop: 4 },
   statCaption: { flex: 1, fontSize: 13, color: "#5b6570" },
   divider: { height: 1, backgroundColor: "#eef0f2", marginVertical: 4 },
   rowBtn: {

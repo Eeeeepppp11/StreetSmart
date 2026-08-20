@@ -1,4 +1,14 @@
-import { deleteDoc, doc, serverTimestamp, setDoc } from "firebase/firestore";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  where,
+  type Unsubscribe,
+} from "firebase/firestore";
 import type { JoltEvent, LatLng } from "@potholeproof/shared-types";
 import { db } from "./firebase";
 
@@ -43,6 +53,17 @@ export async function syncDriveToCloud(
     items,
     route,
     updatedAt: serverTimestamp(),
+  });
+}
+
+/** Live view of one account's own drives — powers the home-screen cloud count and the Saved data merge. */
+export function subscribeToUserDrives(
+  uid: string,
+  onChange: (drives: CloudDrive[]) => void
+): Unsubscribe {
+  const q = query(collection(db, DRIVES_COLLECTION), where("uid", "==", uid));
+  return onSnapshot(q, (snap) => {
+    onChange(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<CloudDrive, "id">) })));
   });
 }
 

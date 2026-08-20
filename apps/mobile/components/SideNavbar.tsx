@@ -8,7 +8,7 @@ interface SideNavbarProps {
   onClose: () => void;
   displayName: string | null;
   email: string | null;
-  savedCount: number;
+  contributedCount: number;
   isAdmin: boolean;
   onStartDrive: () => void;
   onOpenLibrary: () => void;
@@ -21,7 +21,7 @@ export default function SideNavbar({
   onClose,
   displayName,
   email,
-  savedCount,
+  contributedCount,
   isAdmin,
   onStartDrive,
   onOpenLibrary,
@@ -75,7 +75,7 @@ export default function SideNavbar({
               {email}
             </Text>
             <Text style={styles.stat}>
-              {savedCount} labeled event{savedCount === 1 ? "" : "s"} saved
+              {contributedCount} labeled event{contributedCount === 1 ? "" : "s"} contributed
             </Text>
           </View>
 
