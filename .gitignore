@@ -40,6 +40,10 @@ __pycache__/
 ml/models/*.tflite
 ml/models/*.onnx
 ml/data/raw/
+ml/training/artifacts/*.keras
+ml/export/artifacts/*.tflite
+ml/export/artifacts/model_weights.json
+ml/export/artifacts/parity_check.json
 
 # Local ingestion server data (collect-only pilot server, per-machine)
 services/ingestion/*.sqlite

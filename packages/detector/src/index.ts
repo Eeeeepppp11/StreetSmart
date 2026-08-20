@@ -11,3 +11,4 @@ export type { RecordedDrive } from "./replay.js";
 export { replayDrive } from "./replay.js";
 export type { SynthImpulse, SynthOptions } from "./synth.js";
 export { makeSamples } from "./synth.js";
+export { classifyWithModel, runModel, MODEL_VERSION as ML_MODEL_VERSION } from "./model.js";
