@@ -1,0 +1,402 @@
+<title>PotholeProof Cohort Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f7f6f4;
+    --surface: #ffffff;
+    --surface-2: #f0efec;
+    --border: #e4e1db;
+    --ink: #17171a;
+    --ink-soft: #5c5a63;
+    --ink-faint: #8a8790;
+    --accent: #e8442e;
+
+    --c-pothole: #e34948;
+    --c-speed-bump: #2a78d6;
+    --c-rough-road: #eb6834;
+    --c-other: #1baf7a;
+    --c-heuristic: #4a3aa7;
+    --c-ai: #008300;
+
+    --heat-100: #cde2fb; --heat-200: #9ec5f4; --heat-300: #6da7ec;
+    --heat-450: #2a78d6; --heat-600: #184f95; --heat-700: #0d366b;
+
+    --font-display: "Manrope", system-ui, sans-serif;
+    --font-body: "IBM Plex Sans", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #131214;
+      --surface: #1c1b1e;
+      --surface-2: #232226;
+      --border: #333136;
+      --ink: #f5f4f2;
+      --ink-soft: #b8b6bd;
+      --ink-faint: #86838d;
+      --accent: #f0685a;
+
+      --c-pothole: #e66767;
+      --c-speed-bump: #3987e5;
+      --c-rough-road: #d95926;
+      --c-other: #199e70;
+      --c-heuristic: #9085e9;
+      --c-ai: #23c623;
+
+      --heat-100: #12233a; --heat-200: #16345a; --heat-300: #1c4a80;
+      --heat-450: #2f6fc4; --heat-600: #6ea3e8; --heat-700: #bcdcfb;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #131214;
+    --surface: #1c1b1e;
+    --surface-2: #232226;
+    --border: #333136;
+    --ink: #f5f4f2;
+    --ink-soft: #b8b6bd;
+    --ink-faint: #86838d;
+    --accent: #f0685a;
+
+    --c-pothole: #e66767;
+    --c-speed-bump: #3987e5;
+    --c-rough-road: #d95926;
+    --c-other: #199e70;
+    --c-heuristic: #9085e9;
+    --c-ai: #23c623;
+
+    --heat-100: #12233a; --heat-200: #16345a; --heat-300: #1c4a80;
+    --heat-450: #2f6fc4; --heat-600: #6ea3e8; --heat-700: #bcdcfb;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 40px 24px 64px; }
+
+  header.page { margin-bottom: 32px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 10px;
+  }
+  .eyebrow::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  h1 {
+    font-family: var(--font-display); font-weight: 800; font-size: 34px;
+    letter-spacing: -0.01em; margin: 0 0 8px; text-wrap: balance;
+  }
+  .lede { color: var(--ink-soft); font-size: 15px; line-height: 1.55; max-width: 640px; margin: 0; }
+
+  .kpi-row {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px;
+    margin: 28px 0 36px;
+  }
+  .kpi {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 16px 18px;
+  }
+  .kpi .value {
+    font-family: var(--font-mono); font-weight: 700; font-size: 26px; color: var(--ink);
+    display: block; line-height: 1.1;
+  }
+  .kpi .label {
+    font-size: 11.5px; color: var(--ink-faint); text-transform: uppercase;
+    letter-spacing: 0.05em; margin-top: 6px; display: block;
+  }
+  .kpi.split .value { font-size: 20px; }
+  .kpi.split .sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+
+  section.panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 22px 24px;
+  }
+  .panel h2 {
+    font-family: var(--font-display); font-size: 15px; font-weight: 700;
+    margin: 0 0 4px; letter-spacing: -0.005em;
+  }
+  .panel .panel-sub { font-size: 12.5px; color: var(--ink-faint); margin: 0 0 18px; }
+
+  .grid-main {
+    display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; align-items: start;
+  }
+
+  table.roster { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table.roster th {
+    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--ink-faint); font-weight: 600; padding: 0 8px 8px; border-bottom: 1px solid var(--border);
+  }
+  table.roster td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  table.roster tr:last-child td { border-bottom: none; }
+  table.roster .name { font-weight: 600; }
+  table.roster .num { font-family: var(--font-mono); text-align: right; }
+  .cohort-chip {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600;
+    padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+  }
+  .cohort-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; }
+  .cohort-chip.heuristic { background: color-mix(in srgb, var(--c-heuristic) 16%, transparent); color: var(--c-heuristic); }
+  .cohort-chip.heuristic::before { background: var(--c-heuristic); }
+  .cohort-chip.ai { background: color-mix(in srgb, var(--c-ai) 16%, transparent); color: var(--c-ai); }
+  .cohort-chip.ai::before { background: var(--c-ai); }
+
+  .side-stack { display: flex; flex-direction: column; gap: 16px; }
+
+  .model-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+  .model-stat { text-align: center; padding: 10px 4px; background: var(--surface-2); border-radius: 10px; }
+  .model-stat .v { font-family: var(--font-mono); font-weight: 700; font-size: 19px; }
+  .model-stat .l { font-size: 10.5px; color: var(--ink-faint); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.03em; }
+
+  .heatmap-wrap { display: grid; grid-template-columns: 54px repeat(4, 1fr); gap: 3px; margin-bottom: 6px; }
+  .heat-axis-label { font-size: 10px; color: var(--ink-faint); display: flex; align-items: center; justify-content: flex-end; padding-right: 4px; }
+  .heat-col-label { font-size: 10px; color: var(--ink-faint); text-align: center; padding-bottom: 3px; }
+  .heat-cell {
+    aspect-ratio: 1; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+  }
+  .heat-corner { }
+  .matrix-caption { font-size: 11px; color: var(--ink-faint); margin: 8px 0 0; }
+
+  .class-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 4px; }
+  .class-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; padding: 0 6px 6px; }
+  .class-table td { padding: 6px; border-top: 1px solid var(--border); }
+  .class-table .num { font-family: var(--font-mono); text-align: right; }
+  .class-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+
+  .compare-panel { margin-top: 16px; }
+  .compare-legend { display: flex; gap: 18px; margin-bottom: 14px; font-size: 12px; color: var(--ink-soft); }
+  .compare-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .compare-legend .sw { width: 10px; height: 10px; border-radius: 3px; }
+  .bar-group { display: grid; grid-template-columns: 110px 1fr; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .bar-group .bg-label { font-size: 12.5px; font-weight: 600; }
+  .bar-rows { display: flex; flex-direction: column; gap: 4px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; }
+  .bar-row .track { flex: 1; height: 9px; background: var(--surface-2); border-radius: 5px; overflow: hidden; }
+  .bar-row .fill { height: 100%; border-radius: 5px; }
+  .bar-row .n { font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); width: 28px; text-align: right; }
+
+  footer.notes {
+    margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--ink-faint); line-height: 1.6;
+  }
+  footer.notes strong { color: var(--ink-soft); }
+
+  @media (max-width: 860px) {
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .grid-main { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="page">
+    <div class="eyebrow">PotholeProof · Demo cohort</div>
+    <h1>15 drivers, one transition: heuristic rules to a trained AI model</h1>
+    <p class="lede">
+      Synthetic drives anchored to real City of Bellevue 311 pothole and road-maintenance
+      reports (zip 98005), run through the actual on-device detection pipeline. The first
+      10 drivers established the baseline on the hand-tuned heuristic classifier; the most
+      recent 5 ran on <code>mlp-v1-synthetic</code>, the trained neural network.
+    </p>
+  </header>
+
+  <div class="kpi-row">
+    <div class="kpi">
+      <span class="value">15</span>
+      <span class="label">Total drivers</span>
+    </div>
+    <div class="kpi">
+      <span class="value">80</span>
+      <span class="label">Total drives</span>
+    </div>
+    <div class="kpi">
+      <span class="value">360</span>
+      <span class="label">Total events</span>
+    </div>
+    <div class="kpi split">
+      <span class="value" style="color:var(--c-heuristic)">10 · 244</span>
+      <span class="sub">Heuristic cohort — drivers · events</span>
+    </div>
+    <div class="kpi split">
+      <span class="value" style="color:var(--c-ai)">5 · 116</span>
+      <span class="sub">AI cohort — drivers · events</span>
+    </div>
+  </div>
+
+  <div class="grid-main">
+    <section class="panel">
+      <h2>Driver roster</h2>
+      <p class="panel-sub">Sorted by events detected. Cohort = which classifier ran on their drives.</p>
+      <table class="roster">
+        <thead>
+          <tr><th>Driver</th><th>Cohort</th><th style="text-align:right">Drives</th><th style="text-align:right">Events</th></tr>
+        </thead>
+        <tbody id="roster-body"></tbody>
+      </table>
+    </section>
+
+    <div class="side-stack">
+      <section class="panel">
+        <h2>AI model performance</h2>
+        <p class="panel-sub"><code>mlp-v1-synthetic</code> — 10→32→16→4 MLP, real evaluation from the training run.</p>
+        <div class="model-stats">
+          <div class="model-stat"><div class="v">91.1%</div><div class="l">Test accuracy</div></div>
+          <div class="model-stat"><div class="v">2.3%</div><div class="l">Pothole false-pos.</div></div>
+          <div class="model-stat"><div class="v">8,400</div><div class="l">Training examples</div></div>
+        </div>
+
+        <div class="heatmap-wrap" id="heatmap"></div>
+        <p class="matrix-caption">Confusion matrix — rows = actual, columns = predicted. Diagonal = correct.</p>
+
+        <table class="class-table">
+          <thead><tr><th>Class</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th></tr></thead>
+          <tbody id="class-body"></tbody>
+        </table>
+      </section>
+    </div>
+  </div>
+
+  <section class="panel compare-panel">
+    <h2>Classification mix, heuristic era vs. AI era</h2>
+    <p class="panel-sub">What each cohort's drives actually detected — same road types, independent classifiers.</p>
+    <div class="compare-legend">
+      <span><span class="sw" style="background:var(--c-heuristic)"></span>Heuristic cohort (10 drivers, 244 events)</span>
+      <span><span class="sw" style="background:var(--c-ai)"></span>AI cohort (5 drivers, 116 events)</span>
+    </div>
+    <div id="compare-bars"></div>
+  </section>
+
+  <footer class="notes">
+    <strong>Methodology.</strong> All drive data is synthetic — physically-parameterised sensor
+    windows generated the same way as the app's own Demo Drive and ML training-data pipeline —
+    anchored to real coordinates from the City of Bellevue's public MyBellevue 311 feed (158 real
+    pothole reports, 1,256 real road-maintenance reports, zips 98005–98008). Heuristic-cohort
+    events were produced by the Phase-1 hand-tuned threshold classifier; AI-cohort events are the
+    genuine output of <code>classifyWithModel</code> run against extracted feature vectors — not
+    fabricated numbers. Model metrics are the real results of the training run in
+    <code>ml/training/train.py</code>, synced automatically via <code>ml/export/sync_to_app.mjs</code>.
+    No real users or real drives are represented.
+  </footer>
+</div>
+
+<script>
+  const roster = [
+    { name: "Aayan Hetamsaria", cohort: "heuristic", drives: 10, events: 41 },
+    { name: "Aaryaman Chopra (you)", cohort: "heuristic", drives: 2, events: 41 },
+    { name: "Jeffery Lou", cohort: "heuristic", drives: 9, events: 35 },
+    { name: "Lucas Zhang", cohort: "heuristic", drives: 7, events: 35 },
+    { name: "Jack Oliveira", cohort: "ai", drives: 9, events: 31 },
+    { name: "Alex Lee", cohort: "ai", drives: 6, events: 32 },
+    { name: "Ian Tang", cohort: "ai", drives: 7, events: 28 },
+    { name: "Aren Loving", cohort: "heuristic", drives: 5, events: 20 },
+    { name: "Wynston Su", cohort: "heuristic", drives: 6, events: 20 },
+    { name: "Corwin Su", cohort: "heuristic", drives: 4, events: 17 },
+    { name: "Pradyun Vancha", cohort: "ai", drives: 4, events: 15 },
+    { name: "Raghav Chaturvedi", cohort: "heuristic", drives: 3, events: 16 },
+    { name: "Hennry Lou", cohort: "heuristic", drives: 2, events: 11 },
+    { name: "Andrew Chen", cohort: "ai", drives: 3, events: 10 },
+    { name: "Rui Sun", cohort: "heuristic", drives: 3, events: 8 },
+  ].sort((a, b) => b.events - a.events);
+
+  const rosterBody = document.getElementById("roster-body");
+  for (const r of roster) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="name">${r.name}</td>
+      <td><span class="cohort-chip ${r.cohort}">${r.cohort === "ai" ? "AI model" : "Heuristic"}</span></td>
+      <td class="num">${r.drives}</td>
+      <td class="num">${r.events}</td>
+    `;
+    rosterBody.appendChild(tr);
+  }
+
+  // Confusion matrix (rows = actual, cols = predicted), labels order: pothole, speed_bump, rough_road, other
+  const labels = ["Pothole", "Speed bump", "Rough road", "Other"];
+  const matrix = [
+    [344, 7, 1, 0],
+    [5, 349, 6, 1],
+    [4, 8, 254, 44],
+    [12, 0, 24, 201],
+  ];
+  const maxVal = Math.max(...matrix.flat());
+  function heatColor(v) {
+    const t = v / maxVal;
+    if (v === 0) return "var(--surface-2)";
+    if (t < 0.05) return "var(--heat-100)";
+    if (t < 0.15) return "var(--heat-200)";
+    if (t < 0.35) return "var(--heat-300)";
+    if (t < 0.6) return "var(--heat-450)";
+    if (t < 0.85) return "var(--heat-600)";
+    return "var(--heat-700)";
+  }
+  function heatTextColor(v) {
+    const t = v / maxVal;
+    return t > 0.35 ? "#ffffff" : "var(--ink)";
+  }
+  const heatmap = document.getElementById("heatmap");
+  heatmap.innerHTML += `<div class="heat-corner"></div>` + labels.map(l => `<div class="heat-col-label">${l.split(" ")[0]}</div>`).join("");
+  matrix.forEach((row, i) => {
+    heatmap.innerHTML += `<div class="heat-axis-label">${labels[i].split(" ")[0]}</div>`;
+    row.forEach((v) => {
+      heatmap.innerHTML += `<div class="heat-cell" style="background:${heatColor(v)};color:${heatTextColor(v)}">${v}</div>`;
+    });
+  });
+
+  const perClass = {
+    "Pothole": { p: 0.9425, r: 0.9773, f1: 0.9596, color: "var(--c-pothole)" },
+    "Speed bump": { p: 0.9588, r: 0.9668, f1: 0.9628, color: "var(--c-speed-bump)" },
+    "Rough road": { p: 0.8912, r: 0.8194, f1: 0.8538, color: "var(--c-rough-road)" },
+    "Other": { p: 0.8171, r: 0.8481, f1: 0.8323, color: "var(--c-other)" },
+  };
+  const classBody = document.getElementById("class-body");
+  for (const [name, m] of Object.entries(perClass)) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><span class="class-dot" style="background:${m.color}"></span>${name}</td>
+      <td class="num">${Math.round(m.p * 100)}%</td>
+      <td class="num">${Math.round(m.r * 100)}%</td>
+      <td class="num">${Math.round(m.f1 * 100)}%</td>
+    `;
+    classBody.appendChild(tr);
+  }
+
+  const heuristicClass = { pothole: 67, speed_bump: 67, rough_road: 90, other: 20 };
+  const aiClass = { pothole: 35, speed_bump: 25, rough_road: 37, other: 19 };
+  const heuristicTotal = Object.values(heuristicClass).reduce((a, b) => a + b, 0);
+  const aiTotal = Object.values(aiClass).reduce((a, b) => a + b, 0);
+  const classColors = { pothole: "var(--c-pothole)", speed_bump: "var(--c-speed-bump)", rough_road: "var(--c-rough-road)", other: "var(--c-other)" };
+  const classNames = { pothole: "Pothole", speed_bump: "Speed bump", rough_road: "Rough road", other: "Other" };
+  // Share of that cohort's own events, on one common 0-100% scale — raw counts
+  // aren't comparable across cohorts of very different sizes (244 vs 116 events).
+  const compareBars = document.getElementById("compare-bars");
+  for (const key of ["pothole", "speed_bump", "rough_road", "other"]) {
+    const hVal = heuristicClass[key], aVal = aiClass[key];
+    const hPct = (hVal / heuristicTotal) * 100;
+    const aPct = (aVal / aiTotal) * 100;
+    const group = document.createElement("div");
+    group.className = "bar-group";
+    group.innerHTML = `
+      <div class="bg-label"><span class="class-dot" style="background:${classColors[key]}"></span>${classNames[key]}</div>
+      <div class="bar-rows">
+        <div class="bar-row">
+          <div class="track"><div class="fill" style="width:${hPct}%;background:var(--c-heuristic)"></div></div>
+          <div class="n">${hPct.toFixed(0)}%</div>
+        </div>
+        <div class="bar-row">
+          <div class="track"><div class="fill" style="width:${aPct}%;background:var(--c-ai)"></div></div>
+          <div class="n">${aPct.toFixed(0)}%</div>
+        </div>
+      </div>
+    `;
+    compareBars.appendChild(group);
+  }
+</script>
