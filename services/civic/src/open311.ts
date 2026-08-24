@@ -34,7 +34,7 @@ export function hazardToOpen311Request(
   const description =
     `Pothole / road-surface damage detected (${hazard.severityBand}, ` +
     `${pct}% confidence, ${hazard.passCount} passes). ` +
-    `Auto-reported by PotholeProof.`;
+    `Auto-reported by StreetSmart.`;
   const payload: Open311RequestPayload = {
     service_code: options.serviceCode,
     lat: hazard.location.lat,

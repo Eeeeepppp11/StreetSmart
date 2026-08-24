@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
-  title: "PotholeProof — Repair Scorecards",
+  title: "StreetSmart — Repair Scorecards",
   description:
     "Public repair-time scorecards: how fast does your city fix the roads?",
 };

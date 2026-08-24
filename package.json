@@ -2,7 +2,7 @@
   "name": "running-into-potholes",
   "version": "0.0.0",
   "private": true,
-  "description": "PotholeProof — passive road-condition sensing, warn/reroute, and civic accountability.",
+  "description": "StreetSmart — passive road-condition sensing, warn/reroute, and civic accountability.",
   "packageManager": "pnpm@9.12.0",
   "engines": {
     "node": ">=20"

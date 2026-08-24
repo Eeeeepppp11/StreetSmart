@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**PotholeProof** turns a dash-mounted smartphone into a passive road-condition
+**StreetSmart** turns a dash-mounted smartphone into a passive road-condition
 sensor. The phone's accelerometer + gyroscope + GPS (no extra hardware) detect
 potholes in real time on-device, then the system (1) warns and reroutes drivers
 around hazards and (2) files and tracks civic repair requests, auto-verifying

@@ -1,4 +1,4 @@
-# Recording a PotholeProof demo
+# Recording a StreetSmart demo
 
 A 60–90 second video: hook → live detection → the map → the loop → the vision.
 
@@ -39,7 +39,7 @@ training data.
 4. **The loop (15 s)** — tap Upload → terminal shows the data arrive → cut to
    the dashboard scorecards: "reports file to the city automatically, and the
    same detection verifies when they're actually fixed."
-5. **Close (10 s)** — logo/name over the map: "PotholeProof. Every commute is
+5. **Close (10 s)** — logo/name over the map: "StreetSmart. Every commute is
    a road survey."
 
 ## Editing
