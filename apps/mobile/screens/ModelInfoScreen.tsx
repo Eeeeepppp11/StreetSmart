@@ -1,6 +1,8 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { MODEL_METRICS } from "@potholeproof/detector";
+import { Button, Card, ScreenHeader, StatTile } from "../components/ui";
+import { colors, fontFamily, space, typeScale } from "../theme";
 
 interface ModelInfoScreenProps {
   onClose: () => void;
@@ -20,16 +22,13 @@ export default function ModelInfoScreen({ onClose, onOpenLab }: ModelInfoScreenP
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
-      <View style={styles.header}>
-        <Pressable onPress={onClose} hitSlop={10}>
-          <Text style={styles.backText}>‹ Back</Text>
-        </Pressable>
-        <Text style={styles.title}>How the AI works</Text>
+      <View style={styles.headerWrap}>
+        <ScreenHeader title="How the AI works" onBack={onClose} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <Text style={styles.sectionLabel}>Architecture</Text>
+        <Card style={styles.cardMargin}>
+          <Text style={typeScale.label}>Architecture</Text>
           <Text style={styles.body}>
             A small neural network — 10 inputs → 32 → 16 → 4 outputs, ReLU activations, softmax
             classification. It runs as a pure-JS forward pass on-device (no native TFLite, so it
@@ -40,25 +39,16 @@ export default function ModelInfoScreen({ onClose, onOpenLab }: ModelInfoScreenP
             candidate jolt: peak-to-peak acceleration, RMS, max jerk, settle time, vertical
             dominance, gyro RMS, sample count, sample interval, and vehicle speed.
           </Text>
-        </View>
+        </Card>
 
         <View style={styles.statRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{Math.round(m.testAccuracy * 100)}%</Text>
-            <Text style={styles.statLabel}>Test accuracy</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{(m.potholeFalsePositiveRate * 100).toFixed(1)}%</Text>
-            <Text style={styles.statLabel}>Pothole false-positive rate</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{m.datasetSize.toLocaleString()}</Text>
-            <Text style={styles.statLabel}>Training examples</Text>
-          </View>
+          <StatTile value={`${Math.round(m.testAccuracy * 100)}%`} label="Test accuracy" valueColor={colors.status.success} />
+          <StatTile value={`${(m.potholeFalsePositiveRate * 100).toFixed(1)}%`} label="Pothole false-positive rate" />
+          <StatTile value={m.datasetSize.toLocaleString()} label="Training examples" />
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.sectionLabel}>Per-class performance</Text>
+        <Card style={styles.cardMargin}>
+          <Text style={typeScale.label}>Per-class performance</Text>
           <View style={styles.tableHeaderRow}>
             <Text style={[styles.tableCell, styles.tableHeaderText, styles.tableLabelCol]}>Class</Text>
             <Text style={[styles.tableCell, styles.tableHeaderText]}>Precision</Text>
@@ -72,16 +62,16 @@ export default function ModelInfoScreen({ onClose, onOpenLab }: ModelInfoScreenP
                 <Text style={[styles.tableCell, styles.tableLabelCol, styles.tableLabelText]}>
                   {LABEL_DISPLAY[label] ?? label}
                 </Text>
-                <Text style={styles.tableCell}>{Math.round(c.precision * 100)}%</Text>
-                <Text style={styles.tableCell}>{Math.round(c.recall * 100)}%</Text>
-                <Text style={styles.tableCell}>{Math.round(c.f1Score * 100)}%</Text>
+                <Text style={styles.tableCellNumeric}>{Math.round(c.precision * 100)}%</Text>
+                <Text style={styles.tableCellNumeric}>{Math.round(c.recall * 100)}%</Text>
+                <Text style={styles.tableCellNumeric}>{Math.round(c.f1Score * 100)}%</Text>
               </View>
             );
           })}
-        </View>
+        </Card>
 
-        <View style={styles.card}>
-          <Text style={styles.sectionLabel}>Confusion matrix</Text>
+        <Card style={styles.cardMargin}>
+          <Text style={typeScale.label}>Confusion matrix</Text>
           <Text style={styles.tableCaption}>Rows = actual, columns = predicted</Text>
           <View style={styles.matrixHeaderRow}>
             <View style={styles.matrixCornerCell} />
@@ -104,87 +94,45 @@ export default function ModelInfoScreen({ onClose, onOpenLab }: ModelInfoScreenP
               ))}
             </View>
           ))}
-        </View>
+        </Card>
 
-        <Pressable style={styles.labBtn} onPress={onOpenLab}>
-          <Text style={styles.labBtnText}>🔬 Try: Heuristic vs AI Lab</Text>
-        </Pressable>
+        <Button label="Try the heuristic vs AI lab" onPress={onOpenLab} variant="dark" size="lg" icon="flask-outline" />
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#f6f7f9", paddingTop: 56 },
-  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 12 },
-  backText: { color: "#e8442e", fontSize: 15, fontWeight: "600", marginRight: 14 },
-  title: { fontSize: 20, fontWeight: "800", color: "#1a1d21" },
-  content: { paddingHorizontal: 16, paddingBottom: 32 },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#1a1d21",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#8a939d",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    marginBottom: 10,
-  },
-  body: { fontSize: 14, color: "#1a1d21", lineHeight: 20 },
+  screen: { flex: 1, backgroundColor: colors.neutral.bg, paddingTop: 56 },
+  headerWrap: { paddingHorizontal: space.lg },
+  content: { paddingHorizontal: space.lg, paddingBottom: space.xxxl },
+  cardMargin: { marginBottom: space.md },
+  body: { fontFamily: fontFamily.body, fontSize: 14, color: colors.neutral.ink, lineHeight: 20, marginTop: space.sm },
   bodySpaced: { marginTop: 10 },
-  statRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
-  statCard: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 12,
-    alignItems: "center",
-    shadowColor: "#1a1d21",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  statValue: { fontSize: 22, fontWeight: "800", color: "#e8442e" },
-  statLabel: { fontSize: 11, color: "#5b6570", textAlign: "center", marginTop: 4 },
-  tableHeaderRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#eef0f2", paddingBottom: 8, marginBottom: 4 },
-  tableRow: { flexDirection: "row", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#f6f7f9" },
-  tableCell: { flex: 1, fontSize: 13, color: "#1a1d21", textAlign: "center" },
-  tableHeaderText: { fontWeight: "700", color: "#8a939d", fontSize: 11, textTransform: "uppercase" },
+  statRow: { flexDirection: "row", gap: space.sm, marginBottom: space.md },
+  tableHeaderRow: { flexDirection: "row", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.neutral.divider, paddingBottom: space.sm, marginTop: space.sm, marginBottom: 4 },
+  tableRow: { flexDirection: "row", paddingVertical: space.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.neutral.bg },
+  tableCell: { flex: 1, fontFamily: fontFamily.body, fontSize: 13, color: colors.neutral.ink, textAlign: "center" },
+  tableCellNumeric: { flex: 1, fontFamily: fontFamily.monoMedium, fontSize: 13, color: colors.neutral.ink, textAlign: "center" },
+  tableHeaderText: { fontFamily: fontFamily.bodySemibold, color: colors.neutral.inkFaint, fontSize: 11, textTransform: "uppercase" },
   tableLabelCol: { flex: 1.4, textAlign: "left" },
-  tableLabelText: { fontWeight: "700" },
-  tableCaption: { fontSize: 12, color: "#8a939d", marginBottom: 10, marginTop: -4 },
+  tableLabelText: { fontFamily: fontFamily.bodyBold },
+  tableCaption: { fontFamily: fontFamily.bodyMedium, fontSize: 12, color: colors.neutral.inkFaint, marginBottom: space.sm, marginTop: -4 },
   matrixHeaderRow: { flexDirection: "row" },
   matrixCornerCell: { width: 44 },
-  matrixHeaderCell: { flex: 1, fontSize: 11, fontWeight: "700", color: "#8a939d", textAlign: "center" },
+  matrixHeaderCell: { flex: 1, fontFamily: fontFamily.bodySemibold, fontSize: 11, color: colors.neutral.inkFaint, textAlign: "center" },
   matrixRow: { flexDirection: "row", alignItems: "center", marginTop: 6 },
-  matrixRowLabel: { width: 44, fontSize: 11, fontWeight: "700", color: "#8a939d" },
+  matrixRowLabel: { width: 44, fontFamily: fontFamily.bodySemibold, fontSize: 11, color: colors.neutral.inkFaint },
   matrixCell: {
     flex: 1,
     textAlign: "center",
+    fontFamily: fontFamily.monoMedium,
     fontSize: 13,
-    color: "#1a1d21",
-    backgroundColor: "#f6f7f9",
+    color: colors.neutral.ink,
+    backgroundColor: colors.neutral.bg,
     marginHorizontal: 2,
     borderRadius: 6,
     paddingVertical: 6,
   },
-  matrixCellDiagonal: { backgroundColor: "#d9f2df", fontWeight: "800", color: "#1a7f37" },
-  labBtn: {
-    backgroundColor: "#1a1d21",
-    borderRadius: 999,
-    paddingVertical: 16,
-    alignItems: "center",
-    marginTop: 4,
-  },
-  labBtnText: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  matrixCellDiagonal: { backgroundColor: colors.status.successTint, fontFamily: fontFamily.mono, color: colors.status.success },
 });

@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -12,6 +11,8 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useAuth } from "../auth/AuthContext";
+import { Button, Card } from "../components/ui";
+import { colors, fontFamily, radii, space, typeScale } from "../theme";
 
 function authErrorMessage(err: unknown): string {
   const code = (err as { code?: string })?.code ?? "";
@@ -33,6 +34,8 @@ function authErrorMessage(err: unknown): string {
   }
 }
 
+type Field = "name" | "email" | "password" | null;
+
 export default function SignInScreen() {
   const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState<"signIn" | "signUp">("signIn");
@@ -40,6 +43,7 @@ export default function SignInScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [focusedField, setFocusedField] = useState<Field>(null);
 
   async function submit() {
     if (!email.trim() || !password) {
@@ -67,59 +71,60 @@ export default function SignInScreen() {
     >
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <Text style={styles.title}>StreetSmart</Text>
+        <Text style={typeScale.display}>StreetSmart</Text>
         <Text style={styles.tagline}>Every commute is a road survey.</Text>
       </View>
 
-      <View style={styles.card}>
+      <Card>
         <Text style={styles.cardTitle}>
           {mode === "signIn" ? "Sign in" : "Create your account"}
         </Text>
 
         {mode === "signUp" && (
           <TextInput
-            style={styles.input}
+            style={[styles.input, focusedField === "name" && styles.inputFocused]}
             placeholder="Name"
-            placeholderTextColor="#9aa3ad"
+            placeholderTextColor={colors.neutral.inkFaint}
             autoCapitalize="words"
             value={name}
             onChangeText={setName}
+            onFocus={() => setFocusedField("name")}
+            onBlur={() => setFocusedField(null)}
           />
         )}
         <TextInput
-          style={styles.input}
+          style={[styles.input, focusedField === "email" && styles.inputFocused]}
           placeholder="Email"
-          placeholderTextColor="#9aa3ad"
+          placeholderTextColor={colors.neutral.inkFaint}
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="email-address"
           value={email}
           onChangeText={setEmail}
+          onFocus={() => setFocusedField("email")}
+          onBlur={() => setFocusedField(null)}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, focusedField === "password" && styles.inputFocused]}
           placeholder="Password"
-          placeholderTextColor="#9aa3ad"
+          placeholderTextColor={colors.neutral.inkFaint}
           autoCapitalize="none"
           autoCorrect={false}
           secureTextEntry
           value={password}
           onChangeText={setPassword}
+          onFocus={() => setFocusedField("password")}
+          onBlur={() => setFocusedField(null)}
         />
 
-        <Pressable
-          style={[styles.primaryBtn, busy && styles.disabled]}
+        <Button
+          label={mode === "signIn" ? "Sign in" : "Create account"}
           onPress={submit}
-          disabled={busy}
-        >
-          {busy ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.primaryBtnText}>
-              {mode === "signIn" ? "Sign in" : "Create account"}
-            </Text>
-          )}
-        </Pressable>
+          loading={busy}
+          variant="primary"
+          size="lg"
+          style={styles.submitBtn}
+        />
 
         <Pressable
           style={styles.switchBtn}
@@ -132,7 +137,7 @@ export default function SignInScreen() {
               : "Already have an account? Sign in"}
           </Text>
         </Pressable>
-      </View>
+      </Card>
     </KeyboardAvoidingView>
   );
 }
@@ -140,45 +145,28 @@ export default function SignInScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#f6f7f9",
+    backgroundColor: colors.neutral.bg,
     justifyContent: "center",
-    padding: 24,
+    padding: space.xxl,
   },
-  header: { marginBottom: 28, alignItems: "center" },
-  title: { fontSize: 34, fontWeight: "800", color: "#1a1d21" },
-  tagline: { fontSize: 15, color: "#5b6570", marginTop: 4 },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: "#1a1d21",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  cardTitle: { fontSize: 18, fontWeight: "700", color: "#1a1d21", marginBottom: 14 },
+  header: { marginBottom: space.xxl + space.xs, alignItems: "center" },
+  tagline: { fontFamily: fontFamily.body, fontSize: 15, color: colors.neutral.inkSoft, marginTop: 4 },
+  cardTitle: { fontFamily: fontFamily.bodyBold, fontSize: 18, color: colors.neutral.ink, marginBottom: space.md },
   input: {
     alignSelf: "stretch",
-    backgroundColor: "#f6f7f9",
+    backgroundColor: colors.neutral.bg,
     borderWidth: 1,
-    borderColor: "#e3e6ea",
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    borderColor: colors.neutral.border,
+    borderRadius: radii.sm,
+    paddingHorizontal: space.md,
     paddingVertical: 12,
+    fontFamily: fontFamily.body,
     fontSize: 15,
-    color: "#1a1d21",
-    marginBottom: 10,
+    color: colors.neutral.ink,
+    marginBottom: space.sm,
   },
-  primaryBtn: {
-    backgroundColor: "#e8442e",
-    paddingVertical: 16,
-    borderRadius: 999,
-    marginTop: 6,
-    alignItems: "center",
-  },
-  disabled: { opacity: 0.6 },
-  primaryBtnText: { color: "#fff", fontSize: 16, fontWeight: "800" },
-  switchBtn: { marginTop: 16, alignItems: "center" },
-  switchText: { color: "#e8442e", fontSize: 14, fontWeight: "600" },
+  inputFocused: { borderColor: colors.status.info },
+  submitBtn: { marginTop: space.xs },
+  switchBtn: { marginTop: space.md, alignItems: "center" },
+  switchText: { color: colors.brand.primary, fontFamily: fontFamily.bodySemibold, fontSize: 14 },
 });

@@ -1,7 +1,16 @@
 import { useEffect, useRef } from "react";
 import { Animated, Dimensions, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { colors, fontFamily, radii, space } from "../theme";
 
 const DRAWER_WIDTH = Math.min(300, Dimensions.get("window").width * 0.8);
+
+interface NavItem {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+  danger?: boolean;
+}
 
 interface SideNavbarProps {
   visible: boolean;
@@ -52,22 +61,22 @@ export default function SideNavbar({
 
   const initial = (displayName || email || "?").trim().charAt(0).toUpperCase();
 
+  const items: NavItem[] = [
+    { icon: "navigate-outline", label: "Start Navigation", onPress: onNavigate },
+    { icon: "construct-outline", label: "Survey Roads", onPress: onContribute },
+    { icon: "folder-outline", label: "Saved data", onPress: onOpenLibrary },
+    { icon: "hardware-chip-outline", label: "How the AI works", onPress: onOpenModelInfo },
+    ...(isAdmin ? [{ icon: "stats-chart-outline" as const, label: "Admin dashboard", onPress: onOpenAdmin }] : []),
+  ];
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <View style={styles.fill}>
         <Animated.View style={[styles.backdrop, { opacity: fade }]}>
           <Pressable style={styles.fill} onPress={onClose} />
         </Animated.View>
 
-        <Animated.View
-          style={[styles.drawer, { width: DRAWER_WIDTH, transform: [{ translateX: slide }] }]}
-        >
+        <Animated.View style={[styles.drawer, { width: DRAWER_WIDTH, transform: [{ translateX: slide }] }]}>
           <View style={styles.profile}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{initial}</Text>
@@ -85,75 +94,32 @@ export default function SideNavbar({
 
           <View style={styles.divider} />
 
-          <Pressable
-            style={styles.navItem}
-            onPress={() => {
-              onClose();
-              onNavigate();
-            }}
-          >
-            <Text style={styles.navIcon}>🧭</Text>
-            <Text style={styles.navLabel}>Start Navigation</Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.navItem}
-            onPress={() => {
-              onClose();
-              onContribute();
-            }}
-          >
-            <Text style={styles.navIcon}>🚧</Text>
-            <Text style={styles.navLabel}>Survey Roads</Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.navItem}
-            onPress={() => {
-              onClose();
-              onOpenLibrary();
-            }}
-          >
-            <Text style={styles.navIcon}>📂</Text>
-            <Text style={styles.navLabel}>Saved data</Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.navItem}
-            onPress={() => {
-              onClose();
-              onOpenModelInfo();
-            }}
-          >
-            <Text style={styles.navIcon}>🤖</Text>
-            <Text style={styles.navLabel}>How the AI works</Text>
-          </Pressable>
-
-          {isAdmin && (
+          {items.map((item) => (
             <Pressable
-              style={styles.navItem}
+              key={item.label}
+              style={({ pressed }) => [styles.navItem, pressed && styles.navItemPressed]}
               onPress={() => {
                 onClose();
-                onOpenAdmin();
+                item.onPress();
               }}
             >
-              <Text style={styles.navIcon}>📊</Text>
-              <Text style={styles.navLabel}>Admin dashboard</Text>
+              <Ionicons name={item.icon} size={20} color={colors.neutral.ink} style={styles.navIcon} />
+              <Text style={styles.navLabel}>{item.label}</Text>
             </Pressable>
-          )}
+          ))}
 
           <View style={styles.spacer} />
 
           <View style={styles.divider} />
 
           <Pressable
-            style={styles.navItem}
+            style={({ pressed }) => [styles.navItem, pressed && styles.navItemPressed]}
             onPress={() => {
               onClose();
               onLogOut();
             }}
           >
-            <Text style={styles.navIcon}>🚪</Text>
+            <Ionicons name="log-out-outline" size={20} color={colors.status.danger} style={styles.navIcon} />
             <Text style={[styles.navLabel, styles.logOutText]}>Log out</Text>
           </Pressable>
         </Animated.View>
@@ -173,33 +139,42 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: "#fff",
+    backgroundColor: colors.neutral.surface,
     paddingTop: 64,
-    paddingHorizontal: 20,
+    paddingHorizontal: space.xl,
     shadowColor: "#000",
     shadowOpacity: 0.2,
     shadowRadius: 12,
     shadowOffset: { width: 4, height: 0 },
     elevation: 8,
   },
-  profile: { alignItems: "flex-start", marginBottom: 12 },
+  profile: { alignItems: "flex-start", marginBottom: space.md },
   avatar: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: "#e8442e",
+    backgroundColor: colors.brand.primary,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
+    marginBottom: space.md,
   },
-  avatarText: { color: "#fff", fontSize: 24, fontWeight: "800" },
-  name: { fontSize: 18, fontWeight: "800", color: "#1a1d21", alignSelf: "stretch" },
-  email: { fontSize: 13, color: "#5b6570", marginTop: 2, alignSelf: "stretch" },
-  stat: { fontSize: 12, color: "#8a939d", marginTop: 8 },
-  divider: { height: 1, backgroundColor: "#eef0f2", marginVertical: 12 },
-  navItem: { flexDirection: "row", alignItems: "center", paddingVertical: 14, gap: 14 },
-  navIcon: { fontSize: 20, width: 24, textAlign: "center" },
-  navLabel: { fontSize: 16, fontWeight: "600", color: "#1a1d21" },
-  logOutText: { color: "#d92616" },
+  avatarText: { color: colors.white, fontSize: 24, fontFamily: fontFamily.display },
+  name: { fontSize: 18, fontFamily: fontFamily.display, color: colors.neutral.ink, alignSelf: "stretch" },
+  email: { fontSize: 13, color: colors.neutral.inkSoft, marginTop: 2, alignSelf: "stretch", fontFamily: fontFamily.body },
+  stat: { fontSize: 12, color: colors.neutral.inkFaint, marginTop: space.sm, fontFamily: fontFamily.bodyMedium },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.neutral.divider, marginVertical: space.md },
+  navItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: space.sm,
+    marginHorizontal: -space.sm,
+    borderRadius: radii.sm,
+    gap: 14,
+  },
+  navItemPressed: { backgroundColor: colors.neutral.surfaceAlt },
+  navIcon: { width: 22, textAlign: "center" },
+  navLabel: { fontSize: 16, fontFamily: fontFamily.bodySemibold, color: colors.neutral.ink },
+  logOutText: { color: colors.status.danger },
   spacer: { flex: 1 },
 });

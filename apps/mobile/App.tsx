@@ -3,6 +3,7 @@ import { StatusBar } from "expo-status-bar";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
   Pressable,
   ScrollView,
@@ -13,6 +14,7 @@ import {
   Vibration,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
@@ -22,6 +24,8 @@ import { DetectionPipeline, makeSamples, classifyWithModel } from "@potholeproof
 import type { GpsFix } from "@potholeproof/detector";
 import type { JoltEvent, LatLng, SensorSample, Vec3 } from "@potholeproof/shared-types";
 import { useAuth } from "./auth/AuthContext";
+import { Badge, Button, Card, ConfidenceBar, EmptyState, IconButton, SeverityBadge } from "./components/ui";
+import { classify, colors, durations, fontFamily, radii, space, typeScale, useAppFonts, useCountUp, usePhaseFade } from "./theme";
 import SignInScreen from "./screens/SignInScreen";
 import AdminScreen from "./screens/AdminScreen";
 import NavigateScreen from "./screens/NavigateScreen";
@@ -40,6 +44,7 @@ import {
 const G = 9.81; // expo-sensors accelerometer reports g-force incl. gravity
 const SENSOR_INTERVAL_MS = 20; // request ~50 Hz
 const DRAIN_INTERVAL_MS = 300;
+const CONFIRM_WINDOW_MS = 6000;
 const SERVER_KEY = "pp.server.url";
 const ANON_KEY = "pp.anon.id";
 // Small MLP trained on synthetic, physically-parameterised sensor windows
@@ -140,15 +145,6 @@ function groupLibraryByDrive(items: LabeledEvent[]): DriveGroup[] {
     .sort((a, b) => b.latestAt.localeCompare(a.latestAt));
 }
 
-/** Marker colour: potholes by severity, impostors muted. */
-function pinColor(e: JoltEvent): string {
-  if (e.classification === "pothole") {
-    return e.severity >= 0.67 ? "#d92616" : e.severity >= 0.34 ? "#e8812e" : "#e6b91e";
-  }
-  if (e.classification === "speed_bump") return "#4a72da";
-  return "#8a939d";
-}
-
 /**
  * Piecewise-linear speed profile, m/s, with keyframes at [ms, speed]. Models a
  * real local drive: pull away → residential cruise → stop → pull away again →
@@ -223,7 +219,48 @@ function buildDemoDrive(): { samples: SensorSample[]; gps: GpsFix[] } {
   return { samples, gps };
 }
 
+/** Full-screen tap-to-confirm prompt, keyed per-detection by the caller so it
+ *  remounts (and re-animates) fresh each time a new jolt fires. */
+function ConfirmOverlay({ event, onConfirm }: { event: JoltEvent; onConfirm: () => void }) {
+  const scale = useRef(new Animated.Value(0.9)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  const barWidth = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: durations.base, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 30 }),
+    ]).start();
+    Animated.timing(barWidth, {
+      toValue: 0,
+      duration: CONFIRM_WINDOW_MS,
+      useNativeDriver: false,
+    }).start();
+  }, []);
+
+  return (
+    <Pressable style={styles.confirmOverlay} onPress={onConfirm}>
+      <Animated.View style={{ opacity, transform: [{ scale }], alignItems: "center" }}>
+        <Badge label={`AI · ${Math.round(event.confidence * 100)}% confident`} icon="hardware-chip-outline" tone="dark" />
+        <Text style={styles.confirmBig}>Tap to confirm pothole</Text>
+        <Text style={styles.confirmSub}>
+          {event.classification.replace("_", " ")} detected · ignore to decide later
+        </Text>
+      </Animated.View>
+      <View style={styles.confirmCountdownTrack}>
+        <Animated.View
+          style={[
+            styles.confirmCountdownFill,
+            { width: barWidth.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }) },
+          ]}
+        />
+      </View>
+    </Pressable>
+  );
+}
+
 export default function App() {
+  const [fontsLoaded] = useAppFonts();
   const { user, initializing, logOut } = useAuth();
   const [navOpen, setNavOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -245,6 +282,9 @@ export default function App() {
   const [routePoints, setRoutePoints] = useState<LatLng[]>([]);
   const [syncingAll, setSyncingAll] = useState(false);
   const [cloudDrives, setCloudDrives] = useState<CloudDrive[]>([]);
+  const cloudEventCount = cloudDrives.reduce((sum, d) => sum + d.items.length, 0);
+  const animatedEventCount = useCountUp(cloudEventCount);
+  const fade = usePhaseFade(phase);
 
   const pipeline = useRef<DetectionPipeline | null>(null);
   const liveLabels = useRef<Record<string, Label>>({});
@@ -282,11 +322,11 @@ export default function App() {
     return subscribeToUserDrives(user.uid, setCloudDrives);
   }, [user]);
 
-  if (initializing) {
+  if (!fontsLoaded || initializing) {
     return (
       <View style={[styles.screen, styles.centerFill]}>
         <StatusBar style="dark" />
-        <ActivityIndicator size="large" color="#e8442e" />
+        <ActivityIndicator size="large" color={colors.brand.primary} />
       </View>
     );
   }
@@ -330,7 +370,7 @@ export default function App() {
     Speech.speak(`${what} Tap to confirm pothole.`, { rate: 1.05 });
     if (confirmTimer.current) clearTimeout(confirmTimer.current);
     setPendingConfirm(latest);
-    confirmTimer.current = setTimeout(() => setPendingConfirm(null), 6000);
+    confirmTimer.current = setTimeout(() => setPendingConfirm(null), CONFIRM_WINDOW_MS);
   }
 
   function confirmPothole() {
@@ -844,14 +884,15 @@ export default function App() {
         : null;
 
     return (
-      <View style={styles.screen}>
+      <Animated.View style={[styles.screen, { opacity: fade }]}>
         <StatusBar style="dark" />
         {editingDriveId && (
           <Pressable style={styles.backRow} onPress={cancelDriveEdit} hitSlop={8}>
-            <Text style={styles.backRowText}>‹ Saved data</Text>
+            <Ionicons name="chevron-back" size={18} color={colors.brand.primary} />
+            <Text style={styles.backRowText}>Saved data</Text>
           </Pressable>
         )}
-        <Text style={styles.h1}>
+        <Text style={typeScale.h1}>
           {editingDriveId ? "Edit drive" : isDemo ? "Demo results" : "Review drive"}
         </Text>
         <Text style={styles.sub}>
@@ -871,7 +912,7 @@ export default function App() {
                     latitude: p.lat,
                     longitude: p.lng,
                   }))}
-                  strokeColor="#4a72da"
+                  strokeColor={colors.status.info}
                   strokeWidth={4}
                 />
                 <Marker
@@ -879,7 +920,7 @@ export default function App() {
                     latitude: routePoints[0]!.lat,
                     longitude: routePoints[0]!.lng,
                   }}
-                  pinColor="#2e9e4f"
+                  pinColor={colors.status.success}
                   title="Start"
                 />
                 <Marker
@@ -887,7 +928,7 @@ export default function App() {
                     latitude: routePoints[routePoints.length - 1]!.lat,
                     longitude: routePoints[routePoints.length - 1]!.lng,
                   }}
-                  pinColor="#1a1d21"
+                  pinColor={colors.neutral.ink}
                   title="End"
                 />
               </>
@@ -896,7 +937,7 @@ export default function App() {
               <Marker
                 key={e.id}
                 coordinate={{ latitude: e.location.lat, longitude: e.location.lng }}
-                pinColor={pinColor(e)}
+                pinColor={classify(e).color}
                 title={e.classification.replace("_", " ")}
                 description={`severity ${Math.round(e.severity * 100)}% · confidence ${Math.round(e.confidence * 100)}%`}
               />
@@ -908,87 +949,94 @@ export default function App() {
           data={events}
           keyExtractor={(e) => e.id}
           ListEmptyComponent={
-            <Text style={styles.sub}>No jolts detected this drive. Smooth roads!</Text>
+            <EmptyState
+              icon="checkmark-circle-outline"
+              title="No jolts detected"
+              message="Smooth roads this drive — nothing to review."
+              tone="success"
+            />
           }
-          renderItem={({ item }) => {
+          renderItem={({ item, index }) => {
             const label = labels[item.id];
+            const info = classify(item);
             return (
-              <View style={styles.card}>
+              <Card style={styles.eventCard}>
                 <View style={styles.cardRow}>
-                  <View style={[styles.dot, { backgroundColor: pinColor(item) }]} />
-                  <Text style={[styles.cardTitle, editingDriveId && { flex: 1 }]}>
-                    {item.classification.replace("_", " ")} ·{" "}
-                    {Math.round(item.severity * 100)}%
-                  </Text>
+                  <SeverityBadge info={info} />
                   {editingDriveId && (
                     <Pressable
                       onPress={() => removeEventFromEditor(item.id)}
                       style={styles.trashBtn}
                       hitSlop={8}
                     >
-                      <Text style={styles.trashText}>🗑</Text>
+                      <Ionicons name="trash-outline" size={17} color={colors.neutral.inkFaint} />
                     </Pressable>
                   )}
                 </View>
                 <Text style={styles.cardMeta}>
                   {new Date(item.capturedAt).toLocaleTimeString()} ·{" "}
-                  {(item.speedMps * 2.237).toFixed(0)} mph
+                  {(item.speedMps * 2.237).toFixed(0)} mph · severity {Math.round(item.severity * 100)}%
                 </Text>
                 <View style={styles.aiRow}>
-                  <View style={styles.aiBadge}>
-                    <Text style={styles.aiBadgeText}>🤖 {item.modelVersion}</Text>
-                  </View>
-                  <View style={styles.confidenceBarTrack}>
-                    <View
-                      style={[styles.confidenceBarFill, { width: `${Math.round(item.confidence * 100)}%` }]}
-                    />
-                  </View>
+                  <Badge label={item.modelVersion} icon="hardware-chip-outline" tone="neutral" />
+                  <ConfidenceBar
+                    pct={item.confidence}
+                    color={colors.brand.primary}
+                    delayMs={Math.min(index, 6) * 30}
+                  />
                   <Text style={styles.confidencePct}>{Math.round(item.confidence * 100)}%</Text>
                 </View>
                 {!isDemo && (
                   <View style={styles.row}>
-                    <Pressable
-                      onPress={() => setLabel(item.id, "pothole")}
-                      style={[styles.labelBtn, label === "pothole" && styles.labelYes]}
-                    >
-                      <Text style={styles.labelText}>✓ Pothole</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => setLabel(item.id, "not_pothole")}
-                      style={[styles.labelBtn, label === "not_pothole" && styles.labelNo]}
-                    >
-                      <Text style={styles.labelText}>✗ Not</Text>
-                    </Pressable>
+                    <View style={styles.rowBtnFlex}>
+                      <Button
+                        label="Pothole"
+                        icon="checkmark-outline"
+                        variant={label === "pothole" ? "primary" : "outline"}
+                        size="sm"
+                        onPress={() => setLabel(item.id, "pothole")}
+                      />
+                    </View>
+                    <View style={styles.rowBtnFlex}>
+                      <Button
+                        label="Not a pothole"
+                        icon="close-outline"
+                        variant={label === "not_pothole" ? "danger" : "outline"}
+                        size="sm"
+                        onPress={() => setLabel(item.id, "not_pothole")}
+                      />
+                    </View>
                   </View>
                 )}
-              </View>
+              </Card>
             );
           }}
         />
-        <Pressable
-          style={styles.primaryBtn}
-          onPress={editingDriveId ? saveDriveEdits : saveLabels}
-        >
-          <Text style={styles.primaryBtnText}>
-            {editingDriveId
+        <Button
+          label={
+            editingDriveId
               ? "Save changes"
               : isDemo
                 ? "Done"
                 : pending > 0
                   ? `Save (${pending} unlabeled skipped)`
-                  : "Save labels"}
-          </Text>
-        </Pressable>
-      </View>
+                  : "Save labels"
+          }
+          onPress={editingDriveId ? saveDriveEdits : saveLabels}
+          variant="primary"
+          size="lg"
+          style={styles.reviewSaveBtn}
+        />
+      </Animated.View>
     );
   }
 
   if (phase === "library") {
     const drives = groupLibraryByDrive(library);
     return (
-      <View style={styles.screen}>
+      <Animated.View style={[styles.screen, { opacity: fade }]}>
         <StatusBar style="dark" />
-        <Text style={styles.h1}>Saved data</Text>
+        <Text style={typeScale.h1}>Saved data</Text>
         <Text style={styles.sub}>
           {library.length} labeled event{library.length === 1 ? "" : "s"} across{" "}
           {drives.length} drive{drives.length === 1 ? "" : "s"}
@@ -997,28 +1045,36 @@ export default function App() {
           style={{ flex: 1, alignSelf: "stretch" }}
           data={drives}
           keyExtractor={(g) => g.driveId}
-          ListEmptyComponent={<Text style={styles.sub}>Nothing saved yet.</Text>}
+          ListEmptyComponent={
+            <EmptyState
+              icon="folder-open-outline"
+              title="Nothing saved yet"
+              message="Drives you label will show up here."
+            />
+          }
           renderItem={({ item: group }) => {
             const potholeCount = group.items.filter((l) => l.label === "pothole").length;
             return (
-              <Pressable style={styles.card} onPress={() => openDriveForEdit(group)}>
-                <View style={styles.cardRow}>
-                  <Text style={[styles.cardTitle, { flex: 1 }]}>
-                    {new Date(group.latestAt).toLocaleString()}
+              <Pressable onPress={() => openDriveForEdit(group)}>
+                <Card style={styles.eventCard}>
+                  <View style={styles.cardRow}>
+                    <Text style={[styles.cardTitle, { flex: 1 }]}>
+                      {new Date(group.latestAt).toLocaleString()}
+                    </Text>
+                    <Pressable
+                      onPress={() => deleteDrive(group.driveId)}
+                      style={styles.trashBtn}
+                      hitSlop={8}
+                    >
+                      <Ionicons name="trash-outline" size={17} color={colors.neutral.inkFaint} />
+                    </Pressable>
+                    <Ionicons name="chevron-forward" size={18} color={colors.neutral.inkDisabled} />
+                  </View>
+                  <Text style={styles.cardMeta}>
+                    {group.items.length} event{group.items.length === 1 ? "" : "s"} ·{" "}
+                    {potholeCount} pothole{potholeCount === 1 ? "" : "s"} confirmed
                   </Text>
-                  <Pressable
-                    onPress={() => deleteDrive(group.driveId)}
-                    style={styles.trashBtn}
-                    hitSlop={8}
-                  >
-                    <Text style={styles.trashText}>🗑</Text>
-                  </Pressable>
-                  <Text style={styles.rowBtnChevron}>›</Text>
-                </View>
-                <Text style={styles.cardMeta}>
-                  {group.items.length} event{group.items.length === 1 ? "" : "s"} ·{" "}
-                  {potholeCount} pothole{potholeCount === 1 ? "" : "s"} confirmed
-                </Text>
+                </Card>
               </Pressable>
             );
           }}
@@ -1028,10 +1084,8 @@ export default function App() {
             <Text style={styles.dangerText}>Delete all</Text>
           </Pressable>
         )}
-        <Pressable style={styles.primaryBtn} onPress={() => setPhase("idle")}>
-          <Text style={styles.primaryBtnText}>Done</Text>
-        </Pressable>
-      </View>
+        <Button label="Done" onPress={() => setPhase("idle")} variant="primary" size="lg" style={styles.reviewSaveBtn} />
+      </Animated.View>
     );
   }
 
@@ -1055,11 +1109,11 @@ export default function App() {
 
   if (phase === "driving") {
     return (
-      <View style={[styles.screen, styles.driveScreen]}>
+      <Animated.View style={[styles.screen, styles.driveScreen, { opacity: fade }]}>
         <StatusBar style="light" />
         {isDemo && (
-          <View style={styles.demoBadge}>
-            <Text style={styles.demoBadgeText}>SIMULATED DRIVE</Text>
+          <View style={styles.demoBadgeWrap}>
+            <Badge label="Simulated drive" icon="play-outline" tone="warning" />
           </View>
         )}
         <Text style={styles.driveSpeed}>
@@ -1073,34 +1127,19 @@ export default function App() {
         <Text style={styles.driveStat}>
           jolt{events.length === 1 ? "" : "s"} detected
         </Text>
-        <Pressable style={styles.stopBtn} onPress={stopDrive}>
-          <Text style={styles.primaryBtnText}>END DRIVE</Text>
-        </Pressable>
+        <Button label="End drive" onPress={stopDrive} variant="danger" size="lg" icon="stop-circle-outline" style={styles.stopBtnMargin} />
         <Text style={styles.driveHint}>
           {isDemo
             ? "Replaying a synthetic road through the real detector."
             : "Mount the phone, keep the app open, and drive normally."}
         </Text>
-        {pendingConfirm && (
-          <Pressable style={styles.confirmOverlay} onPress={confirmPothole}>
-            <Text style={styles.confirmAiBadge}>
-              🤖 AI · {Math.round(pendingConfirm.confidence * 100)}% confident
-            </Text>
-            <Text style={styles.confirmBig}>TAP = POTHOLE</Text>
-            <Text style={styles.confirmSub}>
-              {pendingConfirm.classification.replace("_", " ")} detected ·
-              ignore to decide later
-            </Text>
-          </Pressable>
-        )}
-      </View>
+        {pendingConfirm && <ConfirmOverlay key={pendingConfirm.id} event={pendingConfirm} onConfirm={confirmPothole} />}
+      </Animated.View>
     );
   }
 
-  const cloudEventCount = cloudDrives.reduce((sum, d) => sum + d.items.length, 0);
-
   return (
-    <View style={[styles.screen, styles.homeScreen]}>
+    <Animated.View style={[styles.screen, styles.homeScreen, { opacity: fade }]}>
       <StatusBar style="dark" />
       <SideNavbar
         visible={navOpen}
@@ -1122,39 +1161,32 @@ export default function App() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.homeHeader}>
-          <Pressable
-            style={styles.menuBtn}
-            onPress={() => setNavOpen(true)}
-            hitSlop={10}
-          >
-            <Text style={styles.menuBtnText}>☰</Text>
-          </Pressable>
+          <View style={styles.menuBtnWrap}>
+            <IconButton icon="menu-outline" onPress={() => setNavOpen(true)} accessibilityLabel="Open menu" />
+          </View>
           <Text style={styles.homeTitle}>StreetSmart</Text>
           <Text style={styles.homeTagline}>Every commute is a road survey.</Text>
         </View>
 
         <View style={styles.heroGroup}>
-          <Pressable style={styles.primaryBtn} onPress={() => setPhase("navigate")}>
-            <Text style={styles.primaryBtnText}>START NAVIGATION</Text>
-          </Pressable>
-          <Pressable style={styles.demoBtn} onPress={startDrive}>
-            <Text style={styles.demoBtnText}>🚧 Survey Roads</Text>
-          </Pressable>
-          <Pressable style={styles.demoBtn} onPress={startDemoDrive}>
-            <Text style={styles.demoBtnText}>▶ Demo drive (simulated)</Text>
-          </Pressable>
+          <Button label="Start navigation" onPress={() => setPhase("navigate")} variant="primary" size="lg" icon="navigate" />
+          <Button label="Survey roads" onPress={startDrive} variant="outline" size="lg" icon="construct-outline" />
+          <Button label="Demo drive (simulated)" onPress={startDemoDrive} variant="outline" size="lg" icon="play-outline" />
         </View>
 
-        <Pressable style={styles.aiCallout} onPress={() => setPhase("modelInfo")}>
-          <Text style={styles.aiCalloutText}>🤖 Potholes are classified by a trained AI model</Text>
-          <Text style={styles.aiCalloutChevron}>›</Text>
+        <Pressable onPress={() => setPhase("modelInfo")}>
+          <Card dark style={styles.aiCallout}>
+            <Ionicons name="hardware-chip-outline" size={20} color={colors.white} style={styles.aiCalloutIcon} />
+            <Text style={styles.aiCalloutText}>Potholes are classified by a trained AI model</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.neutral.inkFaint} />
+          </Card>
         </Pressable>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Your data</Text>
+        <Card style={styles.sectionCardMargin}>
+          <Text style={typeScale.label}>Your data</Text>
           <View style={styles.statRow}>
             <Text style={[styles.statValue, !cloudEventCount && styles.statValueEmpty]}>
-              {cloudEventCount}
+              {animatedEventCount}
             </Text>
             <Text style={styles.statCaption}>
               {cloudEventCount
@@ -1167,8 +1199,11 @@ export default function App() {
           </Text>
           <View style={styles.divider} />
           <Pressable style={styles.rowBtn} onPress={openLibrary}>
-            <Text style={styles.rowBtnText}>📂 Manage saved data</Text>
-            <Text style={styles.rowBtnChevron}>›</Text>
+            <View style={styles.rowBtnLeft}>
+              <Ionicons name="folder-outline" size={17} color={colors.neutral.ink} />
+              <Text style={styles.rowBtnText}>Manage saved data</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.neutral.inkDisabled} />
           </Pressable>
           <View style={styles.divider} />
           <Pressable
@@ -1176,103 +1211,76 @@ export default function App() {
             onPress={syncAllToCloud}
             disabled={syncingAll}
           >
-            <Text style={styles.rowBtnText}>
-              {syncingAll ? "Syncing…" : "☁ Sync saved drives to cloud"}
-            </Text>
-            <Text style={styles.rowBtnChevron}>›</Text>
+            <View style={styles.rowBtnLeft}>
+              {syncingAll ? (
+                <ActivityIndicator size="small" color={colors.neutral.inkSoft} />
+              ) : (
+                <Ionicons name="cloud-upload-outline" size={17} color={colors.neutral.ink} />
+              )}
+              <Text style={styles.rowBtnText}>{syncingAll ? "Syncing…" : "Sync saved drives to cloud"}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.neutral.inkDisabled} />
           </Pressable>
-        </View>
+        </Card>
 
         <Text style={styles.homeFooter}>detector {MODEL_VERSION}</Text>
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#f6f7f9",
+    backgroundColor: colors.neutral.bg,
     alignItems: "center",
     justifyContent: "center",
-    padding: 24,
+    padding: space.xxl,
     paddingTop: 72,
   },
   centerFill: { padding: 0, paddingTop: 0 },
-  driveScreen: { backgroundColor: "#101317" },
-  h1: { fontSize: 32, fontWeight: "800", color: "#1a1d21" },
-  backRow: { alignSelf: "flex-start", paddingVertical: 6, marginBottom: 2 },
-  backRowText: { color: "#e8442e", fontSize: 15, fontWeight: "600" },
+  driveScreen: { backgroundColor: colors.dark.bg },
+  backRow: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", paddingVertical: 6, marginBottom: 2 },
+  backRowText: { color: colors.brand.primary, fontFamily: fontFamily.bodySemibold, fontSize: 15, marginLeft: 2 },
   sub: {
+    fontFamily: fontFamily.body,
     fontSize: 15,
-    color: "#5b6570",
+    color: colors.neutral.inkSoft,
     textAlign: "center",
-    marginTop: 8,
-    marginBottom: 8,
+    marginTop: space.sm,
+    marginBottom: space.sm,
   },
   homeScreen: { justifyContent: "flex-start", alignItems: "stretch", padding: 0 },
   homeScroll: { flex: 1, alignSelf: "stretch" },
-  homeContent: { paddingHorizontal: 20, paddingTop: 48, paddingBottom: 40 },
-  homeHeader: { marginBottom: 20 },
-  menuBtn: {
+  homeContent: { paddingHorizontal: space.xl, paddingTop: 48, paddingBottom: space.xxxl + space.sm },
+  homeHeader: { marginBottom: space.xxl },
+  menuBtnWrap: {
     position: "absolute",
     top: 0,
     right: 0,
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
     zIndex: 1,
   },
-  menuBtnText: { fontSize: 24, color: "#1a1d21" },
-  homeTitle: { fontSize: 34, fontWeight: "800", color: "#1a1d21" },
-  homeTagline: { fontSize: 15, color: "#5b6570", marginTop: 4 },
-  heroGroup: { marginBottom: 24 },
-  aiCallout: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#1a1d21",
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  aiCalloutText: { color: "#fff", fontSize: 14, fontWeight: "700", flex: 1 },
-  aiCalloutChevron: { color: "#8a939d", fontSize: 20 },
-  sectionCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#1a1d21",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#8a939d",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    marginBottom: 12,
-  },
-  statRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  statValue: { fontSize: 26, fontWeight: "800", color: "#2e9e4f" },
-  statValueEmpty: { color: "#c3c9d0" },
-  statBreakdown: { fontSize: 12, color: "#8a939d", marginTop: 4 },
-  statCaption: { flex: 1, fontSize: 13, color: "#5b6570" },
-  divider: { height: 1, backgroundColor: "#eef0f2", marginVertical: 4 },
+  homeTitle: { ...typeScale.display },
+  homeTagline: { fontFamily: fontFamily.body, fontSize: 15, color: colors.neutral.inkSoft, marginTop: 4 },
+  heroGroup: { marginBottom: space.xxl },
+  aiCallout: { flexDirection: "row", alignItems: "center", marginBottom: space.lg },
+  aiCalloutIcon: { marginRight: space.md },
+  aiCalloutText: { color: colors.white, fontFamily: fontFamily.bodyBold, fontSize: 14, flex: 1, marginRight: space.sm },
+  sectionCardMargin: { marginBottom: space.lg },
+  statRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.sm },
+  statValue: { fontFamily: fontFamily.mono, fontSize: 26, color: colors.status.success },
+  statValueEmpty: { color: colors.neutral.inkDisabled },
+  statBreakdown: { fontFamily: fontFamily.bodyMedium, fontSize: 12, color: colors.neutral.inkFaint, marginTop: 4 },
+  statCaption: { flex: 1, fontFamily: fontFamily.body, fontSize: 13, color: colors.neutral.inkSoft },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.neutral.divider, marginVertical: 4 },
   rowBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: 12,
   },
-  rowBtnText: { fontSize: 15, fontWeight: "600", color: "#1a1d21" },
-  rowBtnChevron: { fontSize: 20, color: "#c3c9d0" },
+  rowBtnLeft: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  rowBtnText: { fontFamily: fontFamily.bodySemibold, fontSize: 15, color: colors.neutral.ink },
   uploadBtn: {
     backgroundColor: "#e8442e",
     borderRadius: 10,
@@ -1320,38 +1328,17 @@ const styles = StyleSheet.create({
   },
   importDividerLine: { flex: 1, height: 1, backgroundColor: "#eef0f2" },
   importDividerText: { fontSize: 12, color: "#8a939d" },
-  homeFooter: { textAlign: "center", color: "#8a939d", fontSize: 12, marginTop: 4 },
+  homeFooter: { textAlign: "center", color: colors.neutral.inkFaint, fontFamily: fontFamily.bodyMedium, fontSize: 12, marginTop: 4 },
   map: {
     alignSelf: "stretch",
     height: 220,
-    borderRadius: 12,
-    marginVertical: 10,
+    borderRadius: radii.md,
+    marginVertical: space.sm,
   },
-  primaryBtn: {
-    backgroundColor: "#e8442e",
-    paddingVertical: 18,
-    paddingHorizontal: 48,
-    borderRadius: 999,
-    marginTop: 24,
-    alignSelf: "stretch",
-    alignItems: "center",
-  },
-  primaryBtnText: { color: "#fff", fontSize: 18, fontWeight: "800" },
-  demoBtn: {
-    borderWidth: 2,
-    borderColor: "#e8442e",
-    paddingVertical: 14,
-    borderRadius: 999,
-    marginTop: 12,
-    alignSelf: "stretch",
-    alignItems: "center",
-  },
-  demoBtnText: { color: "#e8442e", fontSize: 16, fontWeight: "700" },
-  secondaryBtn: { marginTop: 14, padding: 10 },
-  secondaryBtnText: { color: "#e8442e", fontSize: 15, fontWeight: "600" },
-  dangerText: { color: "#d92616", fontSize: 15, fontWeight: "700" },
-  trashBtn: { padding: 6, marginLeft: 8 },
-  trashText: { fontSize: 18 },
+  secondaryBtn: { marginTop: space.md, padding: space.sm },
+  secondaryBtnText: { color: colors.brand.primary, fontFamily: fontFamily.bodySemibold, fontSize: 15 },
+  dangerText: { color: colors.status.danger, fontFamily: fontFamily.bodyBold, fontSize: 15 },
+  trashBtn: { padding: 6, marginLeft: space.sm },
   confirmOverlay: {
     position: "absolute",
     top: 0,
@@ -1363,20 +1350,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     zIndex: 10,
   },
-  confirmAiBadge: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    marginBottom: 14,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    overflow: "hidden",
+  confirmBig: { color: colors.white, fontFamily: fontFamily.display, fontSize: 30, marginTop: space.md, textAlign: "center" },
+  confirmSub: { color: colors.white, opacity: 0.9, marginTop: space.sm, fontFamily: fontFamily.bodyMedium, fontSize: 15, textAlign: "center" },
+  confirmCountdownTrack: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: "rgba(255,255,255,0.25)",
   },
-  confirmBig: { color: "#fff", fontSize: 44, fontWeight: "900" },
-  confirmSub: { color: "#fff", opacity: 0.9, marginTop: 10, fontSize: 15 },
+  confirmCountdownFill: { height: "100%", backgroundColor: colors.white },
   urlInput: {
     alignSelf: "stretch",
     backgroundColor: "#f6f7f9",
@@ -1388,62 +1372,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#1a1d21",
   },
-  demoBadge: {
-    position: "absolute",
-    top: 64,
-    backgroundColor: "#e8812e",
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  demoBadgeText: { color: "#fff", fontWeight: "800", fontSize: 12, letterSpacing: 1 },
-  driveSpeed: { fontSize: 96, fontWeight: "200", color: "#fff" },
-  driveSpeedUnit: { fontSize: 24, color: "#8a939d" },
-  driveCount: { fontSize: 64, fontWeight: "800", color: "#e8442e", marginTop: 24 },
-  driveStat: { fontSize: 14, color: "#8a939d", marginTop: 4 },
+  demoBadgeWrap: { position: "absolute", top: 64, zIndex: 1 },
+  driveSpeed: { fontFamily: fontFamily.mono, fontSize: 80, color: colors.white },
+  driveSpeedUnit: { fontFamily: fontFamily.body, fontSize: 20, color: colors.neutral.inkFaint },
+  driveCount: { fontFamily: fontFamily.mono, fontSize: 56, color: colors.brand.primary, marginTop: space.xxl },
+  driveStat: { fontFamily: fontFamily.bodyMedium, fontSize: 14, color: colors.neutral.inkFaint, marginTop: 4 },
   driveHint: {
     position: "absolute",
     bottom: 28,
-    color: "#5b6570",
+    color: colors.neutral.inkSoft,
+    fontFamily: fontFamily.body,
     fontSize: 13,
     textAlign: "center",
   },
-  stopBtn: {
-    backgroundColor: "#e8442e",
-    paddingVertical: 18,
-    paddingHorizontal: 48,
-    borderRadius: 999,
-    marginTop: 40,
-    alignSelf: "stretch",
-    alignItems: "center",
-  },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 14,
-    marginVertical: 6,
-    alignSelf: "stretch",
-  },
-  cardRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  cardTitle: { fontSize: 16, fontWeight: "700", color: "#1a1d21" },
-  cardMeta: { fontSize: 13, color: "#5b6570", marginTop: 2 },
-  aiRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
-  aiBadge: { backgroundColor: "#eef0f2", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
-  aiBadgeText: { fontSize: 11, fontWeight: "700", color: "#5b6570" },
-  confidenceBarTrack: { flex: 1, height: 5, borderRadius: 3, backgroundColor: "#eef0f2", overflow: "hidden" },
-  confidenceBarFill: { height: "100%", borderRadius: 3, backgroundColor: "#2e9e4f" },
-  confidencePct: { fontSize: 12, fontWeight: "700", color: "#5b6570", width: 34, textAlign: "right" },
-  row: { flexDirection: "row", gap: 10, marginTop: 10 },
-  labelBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#d5dae0",
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  labelYes: { backgroundColor: "#d9f2df", borderColor: "#2e9e4f" },
-  labelNo: { backgroundColor: "#fbe3e0", borderColor: "#e8442e" },
-  labelText: { fontSize: 15, fontWeight: "600", color: "#1a1d21" },
+  stopBtnMargin: { marginTop: space.xxxl, alignSelf: "stretch" },
+  eventCard: { marginVertical: space.xs, alignSelf: "stretch" },
+  cardRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
+  cardTitle: { fontFamily: fontFamily.bodyBold, fontSize: 16, color: colors.neutral.ink },
+  cardMeta: { fontFamily: fontFamily.body, fontSize: 13, color: colors.neutral.inkSoft, marginTop: 2 },
+  aiRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.sm },
+  confidencePct: { fontFamily: fontFamily.monoMedium, fontSize: 12, color: colors.neutral.inkSoft, width: 36, textAlign: "right" },
+  row: { flexDirection: "row", gap: space.sm, marginTop: space.sm },
+  rowBtnFlex: { flex: 1 },
+  reviewSaveBtn: { marginTop: space.lg },
 });

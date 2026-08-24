@@ -1,10 +1,12 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
+  Animated,
   Pressable,
   ScrollView,
-  StyleSheet,
   Switch,
+  StyleSheet,
   Text,
   TextInput,
   Vibration,
@@ -37,6 +39,8 @@ import { reverseGeocode, searchAddress, type GeocodeResult } from "../nav/geocod
 import { cumulativePathMeters, formatDistanceImperial, routeProgress } from "../nav/guidance";
 import { hazardsFromJolts } from "../nav/hazards";
 import type { NavRoute } from "../nav/types";
+import { Button, Card, IconButton, ScreenHeader, SegmentedControl } from "../components/ui";
+import { classify, colors, fontFamily, radii, space, typeScale, usePhaseFade } from "../theme";
 
 /**
  * Live map navigation with hazard-aware routing. Detections here are
@@ -57,7 +61,7 @@ const SENSITIVITY_OPTIONS: { value: AlertSensitivity; label: string }[] = [
   { value: "severe_only", label: "Severe only" },
 ];
 const ALERT_MODE_OPTIONS: { value: AlertMode; label: string }[] = [
-  { value: "voice_haptic", label: "Voice + Haptic" },
+  { value: "voice_haptic", label: "Voice + haptic" },
   { value: "haptic_only", label: "Haptic only" },
   { value: "silent", label: "Silent" },
 ];
@@ -80,14 +84,7 @@ const SEARCH_DEBOUNCE_MS = 300;
 const MIN_SEARCH_QUERY_LENGTH = 3;
 const ROAD_SNAP_CONNECTOR_METERS = 20;
 const CONNECTOR_DASH_PATTERN = [1, 8];
-
-function pinColor(e: JoltEvent): string {
-  if (e.classification === "pothole") {
-    return e.severity >= 0.67 ? "#d92616" : e.severity >= 0.34 ? "#e8812e" : "#e6b91e";
-  }
-  if (e.classification === "speed_bump") return "#4a72da";
-  return "#8a939d";
-}
+const ALT_ROUTE_COLOR = colors.neutral.inkSoft;
 
 function needsRoadSnapConnector(point: LatLng | null, onRoute: LatLng | undefined): boolean {
   if (!point || !onRoute) return false;
@@ -100,6 +97,7 @@ interface NavigateScreenProps {
 
 export default function NavigateScreen({ onClose }: NavigateScreenProps) {
   const [phase, setPhase] = useState<NavPhase>("plan");
+  const fade = usePhaseFade(phase);
   const [events, setEvents] = useState<JoltEvent[]>([]);
   const [speedMps, setSpeedMps] = useState(0);
   const [sampleHz, setSampleHz] = useState(0);
@@ -538,7 +536,7 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
 
   if (phase === "driving") {
     return (
-      <View style={[styles.screen, styles.driveScreen]}>
+      <Animated.View style={[styles.screen, styles.driveScreen, { opacity: fade }]}>
         <StatusBar style="light" />
         <View style={styles.driveHud}>
           <View style={styles.driveHudCell}>
@@ -582,10 +580,10 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
                 <View style={styles.carDot} />
               </Marker>
               {navPath && navPath.length > 1 && (
-                <>
+                <Fragment>
                   <Polyline
                     coordinates={navPath.map((p) => ({ latitude: p.lat, longitude: p.lng }))}
-                    strokeColor="#1f6fe8"
+                    strokeColor={colors.status.info}
                     strokeWidth={5}
                   />
                   {needsRoadSnapConnector(liveFix, navPath[0]) && (
@@ -594,124 +592,95 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
                         { latitude: liveFix.lat, longitude: liveFix.lng },
                         { latitude: navPath[0]!.lat, longitude: navPath[0]!.lng },
                       ]}
-                      strokeColor="#1f6fe8"
+                      strokeColor={colors.status.info}
                       strokeWidth={3}
                       lineDashPattern={CONNECTOR_DASH_PATTERN}
                     />
                   )}
-                </>
+                </Fragment>
               )}
               {navPath && dest && (
-                <Marker coordinate={{ latitude: dest.lat, longitude: dest.lng }} pinColor="#1a7f37" title="Destination" />
+                <Marker coordinate={{ latitude: dest.lat, longitude: dest.lng }} pinColor={colors.status.success} title="Destination" />
               )}
               {events.map((e) => (
-                <Marker key={e.id} coordinate={{ latitude: e.location.lat, longitude: e.location.lng }} pinColor={pinColor(e)} />
+                <Marker key={e.id} coordinate={{ latitude: e.location.lat, longitude: e.location.lng }} pinColor={classify(e).color} />
               ))}
             </MapView>
           ) : (
             <View style={styles.liveMapWaiting}>
-              <Text style={styles.driveStat}>waiting for GPS fix…</Text>
+              <ActivityIndicator size="small" color={colors.neutral.inkFaint} />
+              <Text style={[styles.driveStat, styles.waitingText]}>waiting for GPS fix…</Text>
             </View>
           )}
           {liveFix && !followMe && (
-            <Pressable style={styles.recenterBtn} onPress={recenterDriveMap} accessibilityLabel="Recenter map" hitSlop={8}>
-              <Ionicons name="locate" size={22} color="#1a1d21" />
-            </Pressable>
+            <View style={styles.recenterWrap}>
+              <IconButton icon="locate" variant="floating" onPress={recenterDriveMap} accessibilityLabel="Recenter map" />
+            </View>
           )}
         </View>
-        <Pressable style={styles.stopBtn} onPress={stopDrive}>
-          <Text style={styles.primaryBtnText}>END NAVIGATION</Text>
-        </Pressable>
-      </View>
+        <Button label="End navigation" onPress={stopDrive} variant="danger" size="lg" icon="close-circle-outline" style={styles.stopBtnMargin} />
+      </Animated.View>
     );
   }
 
   if (phase === "settings") {
     return (
-      <View style={[styles.screen, styles.planScreen]}>
+      <Animated.View style={[styles.screen, styles.planScreen, { opacity: fade }]}>
         <StatusBar style="dark" />
         <ScrollView showsVerticalScrollIndicator={false}>
-          <Pressable style={styles.backRow} onPress={() => setPhase("plan")} hitSlop={8}>
-            <Text style={styles.backRowText}>‹ Back</Text>
-          </Pressable>
-          <Text style={styles.h1}>Alert settings</Text>
+          <ScreenHeader title="Alert settings" onBack={() => setPhase("plan")} />
 
-          <View style={styles.sectionCard}>
+          <Card style={styles.settingsCardMargin}>
             <Text style={styles.settingsLabel}>Sensitivity</Text>
-            <View style={styles.segmentRow}>
-              {SENSITIVITY_OPTIONS.map((opt) => (
-                <Pressable
-                  key={opt.value}
-                  style={[styles.segmentBtn, alertSettings.sensitivity === opt.value && styles.segmentBtnActive]}
-                  onPress={() => updateAlertSettings({ sensitivity: opt.value })}
-                >
-                  <Text style={[styles.segmentText, alertSettings.sensitivity === opt.value && styles.segmentTextActive]}>
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+            <SegmentedControl
+              options={SENSITIVITY_OPTIONS}
+              value={alertSettings.sensitivity}
+              onChange={(v) => updateAlertSettings({ sensitivity: v })}
+            />
             <Text style={[styles.settingsLabel, styles.settingsLabelSpaced]}>Alert mode</Text>
-            <View style={styles.segmentRow}>
-              {ALERT_MODE_OPTIONS.map((opt) => (
-                <Pressable
-                  key={opt.value}
-                  style={[styles.segmentBtn, alertSettings.mode === opt.value && styles.segmentBtnActive]}
-                  onPress={() => updateAlertSettings({ mode: opt.value })}
-                >
-                  <Text style={[styles.segmentText, alertSettings.mode === opt.value && styles.segmentTextActive]}>
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
+            <SegmentedControl
+              options={ALERT_MODE_OPTIONS}
+              value={alertSettings.mode}
+              onChange={(v) => updateAlertSettings({ mode: v })}
+            />
+          </Card>
 
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionLabel}>Privacy</Text>
+          <Card style={styles.settingsCardMargin}>
+            <Text style={typeScale.label}>Privacy</Text>
             <Text style={styles.privacyText}>
               Detections during navigation are ephemeral — used only to score routes and show on-map markers for this
               drive, never saved locally or synced to the cloud. Choosing a destination sends only that route
               request&apos;s start and end points to the routing/geocoding services — never your track, never an
               identifier.
             </Text>
-          </View>
+          </Card>
         </ScrollView>
-      </View>
+      </Animated.View>
     );
   }
 
   return (
-    <View style={[styles.screen, styles.planScreen]}>
+    <Animated.View style={[styles.screen, styles.planScreen, { opacity: fade }]}>
       <StatusBar style="dark" />
       <View style={styles.homeTopRow}>
         <View style={styles.homeHeaderText}>
-          <Text style={styles.h1}>Navigate</Text>
+          <Text style={typeScale.h1}>Navigate</Text>
           <Text style={styles.planHint}>
             {dest ? "Tap a route to choose it." : planCenter ? "Search for a destination, or tap the map." : "Finding your location…"}
           </Text>
         </View>
-        <Pressable
-          style={styles.settingsBtn}
-          onPress={() => setPhase("settings")}
-          accessibilityLabel="Alert settings"
-          hitSlop={8}
-        >
-          <Ionicons name="settings-outline" size={22} color="#5b6570" />
-        </Pressable>
-        <Pressable style={styles.closeBtn} onPress={onClose} accessibilityLabel="Close" hitSlop={8}>
-          <Text style={styles.closeBtnText}>×</Text>
-        </Pressable>
+        <IconButton icon="settings-outline" onPress={() => setPhase("settings")} accessibilityLabel="Alert settings" />
+        <IconButton icon="close" onPress={onClose} accessibilityLabel="Close" />
       </View>
 
       <View style={styles.searchFieldWrap}>
         <View style={[styles.searchInputRow, activeField === "origin" && styles.searchInputRowActive]}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Ionicons name="search-outline" size={16} color={colors.neutral.inkFaint} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             value={originQuery}
             placeholder="Choose starting point, or tap on the map"
-            placeholderTextColor="#8a939d"
+            placeholderTextColor={colors.neutral.inkFaint}
             onFocus={() => setActiveField("origin")}
             onChangeText={onOriginQueryChange}
             returnKeyType="search"
@@ -732,12 +701,12 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
 
       <View style={styles.searchFieldWrap}>
         <View style={[styles.searchInputRow, activeField === "destination" && styles.searchInputRowActive]}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Ionicons name="search-outline" size={16} color={colors.neutral.inkFaint} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             value={destQuery}
             placeholder="Destination address, or tap on the map"
-            placeholderTextColor="#8a939d"
+            placeholderTextColor={colors.neutral.inkFaint}
             onFocus={() => setActiveField("destination")}
             onChangeText={onDestQueryChange}
             returnKeyType="search"
@@ -769,7 +738,7 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
           }}
         >
           {routeOptions.map((r, i) => {
-            const routeColor = i === routeChoice ? "#1f6fe8" : "#9aa4b0";
+            const routeColor = i === routeChoice ? colors.status.info : ALT_ROUTE_COLOR;
             const start = r.path[0];
             const end = r.path[r.path.length - 1];
             return (
@@ -806,11 +775,16 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
               </Fragment>
             );
           })}
-          {origin && <Marker coordinate={{ latitude: origin.lat, longitude: origin.lng }} pinColor="#1f6fe8" title="Start" />}
-          {dest && <Marker coordinate={{ latitude: dest.lat, longitude: dest.lng }} pinColor="#1a7f37" title="Destination" />}
+          {origin && <Marker coordinate={{ latitude: origin.lat, longitude: origin.lng }} pinColor={colors.status.info} title="Start" />}
+          {dest && <Marker coordinate={{ latitude: dest.lat, longitude: dest.lng }} pinColor={colors.status.success} title="Destination" />}
         </MapView>
       </View>
-      {routeBusy && <Text style={styles.planStatus}>finding routes…</Text>}
+      {routeBusy && (
+        <View style={styles.planStatusRow}>
+          <ActivityIndicator size="small" color={colors.neutral.inkSoft} />
+          <Text style={styles.planStatus}>finding routes…</Text>
+        </View>
+      )}
       {routeError && <Text style={styles.planError}>{routeError}</Text>}
       {routeOptions.length > 0 && (
         <View style={styles.routeChips}>
@@ -819,18 +793,24 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
             const active = i === routeChoice;
             return (
               <Pressable key={`chip-${i}`} style={[styles.routeChip, active && styles.routeChipActive]} onPress={() => setRouteChoice(i)}>
-                <Text style={[styles.routeChipTitle, active && styles.routeChipTitleActive]}>
-                  {Math.round(r.durationSeconds / 60)} min · {(r.distanceMeters / 1609.34).toFixed(1)} mi
-                </Text>
+                <View style={styles.routeChipTitleRow}>
+                  <Ionicons name="time-outline" size={13} color={active ? colors.status.info : colors.neutral.ink} />
+                  <Text style={[styles.routeChipTitle, active && styles.routeChipTitleActive]}>
+                    {Math.round(r.durationSeconds / 60)} min · {(r.distanceMeters / 1609.34).toFixed(1)} mi
+                  </Text>
+                </View>
                 {score && score.hazardExposureScore > 0 && (
-                  <Text style={styles.routeChipMeta}>rough-road exposure {Math.round(score.hazardExposureScore * 100)}%</Text>
+                  <View style={styles.routeChipMetaRow}>
+                    <Ionicons name="warning-outline" size={11} color={colors.neutral.inkFaint} />
+                    <Text style={styles.routeChipMeta}>rough-road exposure {Math.round(score.hazardExposureScore * 100)}%</Text>
+                  </View>
                 )}
               </Pressable>
             );
           })}
         </View>
       )}
-      <View style={styles.planToggleCard}>
+      <Card style={styles.planToggleCard}>
         <View style={styles.toggleRow}>
           <View style={styles.toggleTextWrap}>
             <Text style={styles.toggleLabel}>Avoid rough roads</Text>
@@ -838,6 +818,7 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
           </View>
           <Switch
             value={avoidRough}
+            trackColor={{ true: colors.brand.primary }}
             onValueChange={(v) => {
               setAvoidRough(v);
               avoidRoughRef.current = v;
@@ -845,131 +826,84 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
             }}
           />
         </View>
-      </View>
-      <Pressable style={styles.primaryBtn} onPress={() => (chosen ? void startDrive(chosen) : void startDrive())}>
-        <Text style={styles.primaryBtnText}>{chosen ? "START NAVIGATION" : "START DRIVE"}</Text>
-      </Pressable>
-    </View>
+      </Card>
+      <Button
+        label={chosen ? "Start navigation" : "Start drive"}
+        onPress={() => (chosen ? void startDrive(chosen) : void startDrive())}
+        variant="primary"
+        size="lg"
+        icon="navigate"
+      />
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#f6f7f9", paddingTop: 56, paddingHorizontal: 16 },
-  driveScreen: { backgroundColor: "#101317", paddingHorizontal: 0 },
+  screen: { flex: 1, backgroundColor: colors.neutral.bg, paddingTop: 56, paddingHorizontal: space.lg },
+  driveScreen: { backgroundColor: colors.dark.bg, paddingHorizontal: 0 },
   planScreen: {},
-  homeTopRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 6, marginBottom: 12 },
-  settingsBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+  homeTopRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: space.xs, marginBottom: space.md },
   homeHeaderText: { flex: 1 },
-  h1: { fontSize: 28, fontWeight: "800", color: "#1a1d21" },
-  planHint: { fontSize: 14, color: "#5b6570", marginTop: 4 },
-  closeBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  closeBtnText: { fontSize: 26, color: "#5b6570", lineHeight: 26 },
-  backRow: { paddingVertical: 6, marginBottom: 8 },
-  backRowText: { color: "#e8442e", fontSize: 15, fontWeight: "600" },
-  sectionCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 16,
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#8a939d",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    marginBottom: 8,
-  },
-  settingsLabel: { fontSize: 14, fontWeight: "700", color: "#1a1d21", marginBottom: 8 },
-  settingsLabelSpaced: { marginTop: 16 },
-  segmentRow: { flexDirection: "row", gap: 8 },
-  segmentBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#e3e6ea",
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  segmentBtnActive: { backgroundColor: "#e8442e", borderColor: "#e8442e" },
-  segmentText: { fontSize: 13, fontWeight: "600", color: "#1a1d21" },
-  segmentTextActive: { color: "#fff" },
-  privacyText: { fontSize: 13, color: "#5b6570", lineHeight: 19 },
-  searchFieldWrap: { marginBottom: 8, zIndex: 5 },
+  planHint: { fontFamily: fontFamily.body, fontSize: 14, color: colors.neutral.inkSoft, marginTop: 4 },
+  settingsCardMargin: { marginTop: space.lg },
+  settingsLabel: { fontFamily: fontFamily.bodyBold, fontSize: 14, color: colors.neutral.ink, marginBottom: space.sm },
+  settingsLabelSpaced: { marginTop: space.lg },
+  privacyText: { fontFamily: fontFamily.body, fontSize: 13, color: colors.neutral.inkSoft, lineHeight: 19, marginTop: space.sm },
+  searchFieldWrap: { marginBottom: space.sm, zIndex: 5 },
   searchInputRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 10,
+    backgroundColor: colors.neutral.surface,
+    borderRadius: radii.sm,
     borderWidth: 1,
-    borderColor: "#e3e6ea",
-    paddingHorizontal: 12,
+    borderColor: colors.neutral.border,
+    paddingHorizontal: space.md,
   },
-  searchInputRowActive: { borderColor: "#1f6fe8" },
-  searchIcon: { fontSize: 14, marginRight: 8 },
-  searchInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: "#1a1d21" },
+  searchInputRowActive: { borderColor: colors.status.info },
+  searchIcon: { marginRight: space.sm },
+  searchInput: { flex: 1, paddingVertical: 12, fontFamily: fontFamily.body, fontSize: 15, color: colors.neutral.ink },
   suggestionList: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
+    backgroundColor: colors.neutral.surface,
+    borderRadius: radii.sm,
     marginTop: 4,
     maxHeight: 180,
     borderWidth: 1,
-    borderColor: "#e3e6ea",
+    borderColor: colors.neutral.border,
   },
-  suggestionRow: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: "#eef0f2" },
-  suggestionRowText: { fontSize: 14, color: "#1a1d21" },
-  planError: { color: "#d92616", fontSize: 13, marginBottom: 6 },
-  planStatus: { color: "#5b6570", fontSize: 13, marginBottom: 6 },
-  planMapWrap: { flex: 1, borderRadius: 12, overflow: "hidden", marginVertical: 8, minHeight: 220 },
-  routeChips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },
-  routeChip: { borderWidth: 1, borderColor: "#e3e6ea", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: "#fff" },
-  routeChipActive: { borderColor: "#1f6fe8", backgroundColor: "#eaf1fd" },
-  routeChipTitle: { fontSize: 13, fontWeight: "700", color: "#1a1d21" },
-  routeChipTitleActive: { color: "#1f6fe8" },
-  routeChipMeta: { fontSize: 11, color: "#8a939d", marginTop: 2 },
-  planToggleCard: { backgroundColor: "#fff", borderRadius: 12, padding: 12, marginBottom: 10 },
-  toggleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  suggestionRow: { paddingVertical: 10, paddingHorizontal: space.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.neutral.divider },
+  suggestionRowText: { fontFamily: fontFamily.body, fontSize: 14, color: colors.neutral.ink },
+  planError: { color: colors.status.danger, fontFamily: fontFamily.bodyMedium, fontSize: 13, marginBottom: space.xs },
+  planStatusRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: space.xs },
+  planStatus: { color: colors.neutral.inkSoft, fontFamily: fontFamily.bodyMedium, fontSize: 13 },
+  planMapWrap: { flex: 1, borderRadius: radii.md, overflow: "hidden", marginVertical: space.sm, minHeight: 220 },
+  routeChips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginBottom: space.sm },
+  routeChip: { borderWidth: 1, borderColor: colors.neutral.border, borderRadius: radii.sm, paddingVertical: space.sm, paddingHorizontal: space.md, backgroundColor: colors.neutral.surface },
+  routeChipActive: { borderColor: colors.status.info, backgroundColor: colors.status.infoTint },
+  routeChipTitleRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  routeChipTitle: { fontFamily: fontFamily.bodyBold, fontSize: 13, color: colors.neutral.ink },
+  routeChipTitleActive: { color: colors.status.info },
+  routeChipMetaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
+  routeChipMeta: { fontFamily: fontFamily.bodyMedium, fontSize: 11, color: colors.neutral.inkFaint },
+  planToggleCard: { marginBottom: space.md },
+  toggleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md },
   toggleTextWrap: { flex: 1 },
-  toggleLabel: { fontSize: 14, fontWeight: "700", color: "#1a1d21" },
-  toggleDescription: { fontSize: 12, color: "#8a939d", marginTop: 2 },
-  primaryBtn: { backgroundColor: "#e8442e", paddingVertical: 16, borderRadius: 999, marginBottom: 16, alignItems: "center" },
-  primaryBtnText: { color: "#fff", fontSize: 16, fontWeight: "800" },
-  driveHud: { flexDirection: "row", paddingTop: 12, paddingHorizontal: 20 },
+  toggleLabel: { fontFamily: fontFamily.bodyBold, fontSize: 14, color: colors.neutral.ink },
+  toggleDescription: { fontFamily: fontFamily.body, fontSize: 12, color: colors.neutral.inkFaint, marginTop: 2 },
+  driveHud: { flexDirection: "row", paddingTop: space.md, paddingHorizontal: space.xl },
   driveHudCell: { flex: 1 },
   driveHudCellRight: { alignItems: "flex-end" },
-  driveSpeed: { fontSize: 48, fontWeight: "200", color: "#fff" },
-  driveSpeedUnit: { fontSize: 16, color: "#8a939d" },
-  driveStat: { fontSize: 12, color: "#8a939d", marginTop: 2 },
-  driveCount: { fontSize: 40, fontWeight: "800", color: "#e8442e" },
-  navBanner: { backgroundColor: "#1a1d21", marginHorizontal: 16, marginTop: 10, borderRadius: 12, padding: 14 },
-  navBannerDist: { color: "#8fb4f5", fontSize: 13, fontWeight: "700" },
-  navBannerText: { color: "#fff", fontSize: 17, fontWeight: "700", marginTop: 2 },
-  liveMapWrap: { flex: 1, marginTop: 12 },
+  driveSpeed: { fontFamily: fontFamily.mono, fontSize: 48, color: colors.white },
+  driveSpeedUnit: { fontFamily: fontFamily.body, fontSize: 16, color: colors.neutral.inkFaint },
+  driveStat: { fontFamily: fontFamily.bodyMedium, fontSize: 12, color: colors.neutral.inkFaint, marginTop: 2 },
+  waitingText: { marginTop: space.sm },
+  driveCount: { fontFamily: fontFamily.mono, fontSize: 40, color: colors.brand.primary },
+  navBanner: { backgroundColor: colors.neutral.ink, marginHorizontal: space.lg, marginTop: space.sm, borderRadius: radii.md, padding: space.md },
+  navBannerDist: { color: "#8fb4f5", fontFamily: fontFamily.bodyBold, fontSize: 13 },
+  navBannerText: { color: colors.white, fontFamily: fontFamily.bodyBold, fontSize: 17, marginTop: 2 },
+  liveMapWrap: { flex: 1, marginTop: space.md },
   liveMap: { flex: 1 },
   liveMapWaiting: { flex: 1, alignItems: "center", justifyContent: "center" },
-  carDot: { width: 18, height: 18, borderRadius: 9, backgroundColor: "#1f6fe8", borderWidth: 3, borderColor: "#fff" },
-  recenterBtn: {
-    position: "absolute",
-    right: 16,
-    bottom: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  recenterBtnText: { fontSize: 18 },
-  stopBtn: {
-    backgroundColor: "#e8442e",
-    paddingVertical: 18,
-    marginHorizontal: 16,
-    marginVertical: 16,
-    borderRadius: 999,
-    alignItems: "center",
-  },
+  carDot: { width: 18, height: 18, borderRadius: 9, backgroundColor: colors.status.info, borderWidth: 3, borderColor: colors.white },
+  recenterWrap: { position: "absolute", right: space.lg, bottom: space.lg },
+  stopBtnMargin: { marginHorizontal: space.lg, marginVertical: space.lg },
 });
