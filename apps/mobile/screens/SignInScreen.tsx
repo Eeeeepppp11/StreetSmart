@@ -67,7 +67,7 @@ export default function SignInScreen() {
     >
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <Text style={styles.title}>PotholeProof</Text>
+        <Text style={styles.title}>StreetSmart</Text>
         <Text style={styles.tagline}>Every commute is a road survey.</Text>
       </View>
 

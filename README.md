@@ -1,9 +1,9 @@
-# PotholeProof
+# StreetSmart
 
 > Passive infrastructure-sensing and routing for drivers and cities.
 
 An ordinary mounted smartphone becomes a passive road-condition sensor. Using
-the phone's accelerometer, gyroscope, and GPS — no extra hardware — PotholeProof
+the phone's accelerometer, gyroscope, and GPS — no extra hardware — StreetSmart
 detects potholes in real time, then (1) **warns and reroutes** drivers around
 hazards and (2) **files and tracks civic repair requests**, closing the loop
 between citizen and city.

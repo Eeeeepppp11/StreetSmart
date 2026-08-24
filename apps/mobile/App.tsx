@@ -516,7 +516,7 @@ export default function App() {
       Alert.alert("Nothing yet", "Label some drives first.");
       return;
     }
-    await Share.share({ message: raw, title: "PotholeProof training data" });
+    await Share.share({ message: raw, title: "StreetSmart training data" });
   }
 
   /** Merge incoming labeled events into local storage, deduped by event id. */
@@ -1129,7 +1129,7 @@ export default function App() {
           >
             <Text style={styles.menuBtnText}>☰</Text>
           </Pressable>
-          <Text style={styles.homeTitle}>PotholeProof</Text>
+          <Text style={styles.homeTitle}>StreetSmart</Text>
           <Text style={styles.homeTagline}>Every commute is a road survey.</Text>
         </View>
 

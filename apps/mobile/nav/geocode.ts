@@ -14,7 +14,7 @@ import type { LatLng } from "@potholeproof/shared-types";
  * failures surface as a thrown Error the UI turns into an inline message.
  */
 const NOMINATIM_BASE = "https://nominatim.openstreetmap.org";
-const USER_AGENT = "PotholeProof-Warning-App";
+const USER_AGENT = "StreetSmart-Warning-App";
 
 /** Minimal structural fetch type so the adapter stays injectable/testable. */
 type FetchLike = (

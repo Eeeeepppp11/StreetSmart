@@ -1,4 +1,4 @@
-# PotholeProof — Technical Architecture
+# StreetSmart — Technical Architecture
 
 > Canonical architecture for the repo. Cross-platform React Native app + backend
 > + ML platform, covering all four phases of the product proposal.
@@ -17,7 +17,7 @@
 
 ## Context
 
-PotholeProof turns a mounted smartphone into a passive road-condition sensor
+StreetSmart turns a mounted smartphone into a passive road-condition sensor
 (accelerometer, gyroscope, GPS — no extra hardware). It **warns and reroutes**
 drivers around hazards (the selfish, daily-use hook) and **files and tracks**
 civic repair requests (the accountability loop). Revenue: municipal data

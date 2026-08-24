@@ -46,7 +46,7 @@ export default function Page() {
 
   return (
     <main style={{ maxWidth: 880, margin: "0 auto", padding: "2rem 1rem" }}>
-      <h1 style={{ marginBottom: 4 }}>PotholeProof · Repair Scorecards</h1>
+      <h1 style={{ marginBottom: 4 }}>StreetSmart · Repair Scorecards</h1>
       <p style={{ color: "#5b6570", marginTop: 0 }}>
         How fast does the city fix what drivers report? Rendered by the same
         aggregation engine that will serve live data.{" "}
@@ -116,7 +116,7 @@ export default function Page() {
       </section>
 
       <footer style={{ color: "#8a939d", fontSize: 13 }}>
-        PotholeProof — every commute is a road survey.
+        StreetSmart — every commute is a road survey.
       </footer>
     </main>
   );

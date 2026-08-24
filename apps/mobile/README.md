@@ -1,4 +1,4 @@
-# apps/mobile — PotholeProof Phase-1 pilot app (Expo)
+# apps/mobile — StreetSmart Phase-1 pilot app (Expo)
 
 The dash-mount test app: reads accelerometer + gyroscope + GPS, runs the
 **real detection engine** (`@potholeproof/detector`, pure TS) live on the
