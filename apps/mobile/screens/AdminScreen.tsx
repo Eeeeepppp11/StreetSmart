@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +13,8 @@ import { collection, onSnapshot } from "firebase/firestore";
 import type { JoltEvent } from "@potholeproof/shared-types";
 import { db } from "../firebase";
 import { DRIVES_COLLECTION, type CloudDrive, type CloudLabel } from "../cloudDrives";
+import { Badge, EmptyState, IconButton, ScreenHeader } from "../components/ui";
+import { classify, colors, fontFamily, radii, space } from "../theme";
 
 interface MapEvent {
   key: string;
@@ -22,15 +23,6 @@ interface MapEvent {
   driveId: string;
   uid: string;
   ownerEmail: string | null;
-}
-
-/** Same color scheme as the review-screen map for visual consistency. */
-function pinColor(e: JoltEvent): string {
-  if (e.classification === "pothole") {
-    return e.severity >= 0.67 ? "#d92616" : e.severity >= 0.34 ? "#e8812e" : "#e6b91e";
-  }
-  if (e.classification === "speed_bump") return "#4a72da";
-  return "#8a939d";
 }
 
 interface AdminScreenProps {
@@ -46,6 +38,7 @@ const FALLBACK_REGION: Region = {
 
 export default function AdminScreen({ onClose }: AdminScreenProps) {
   const [drives, setDrives] = useState<CloudDrive[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [userEmails, setUserEmails] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<MapEvent | null>(null);
   const [initialRegion, setInitialRegion] = useState<Region | null>(null);
@@ -74,6 +67,7 @@ export default function AdminScreen({ onClose }: AdminScreenProps) {
   useEffect(() => {
     const unsubDrives = onSnapshot(collection(db, DRIVES_COLLECTION), (snap) => {
       setDrives(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<CloudDrive, "id">) })));
+      setLoaded(true);
     });
     const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
       const map: Record<string, string> = {};
@@ -134,14 +128,13 @@ export default function AdminScreen({ onClose }: AdminScreenProps) {
     ];
   }, [drives, points]);
 
+  const noDrivesYet = loaded && drives.length === 0;
+
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
-      <View style={styles.header}>
-        <Pressable onPress={onClose} hitSlop={10}>
-          <Text style={styles.backText}>‹ Back</Text>
-        </Pressable>
-        <Text style={styles.title}>Admin dashboard</Text>
+      <View style={styles.headerWrap}>
+        <ScreenHeader title="Admin dashboard" onBack={onClose} />
       </View>
 
       <ScrollView
@@ -169,14 +162,23 @@ export default function AdminScreen({ onClose }: AdminScreenProps) {
               <Marker
                 key={p.key}
                 coordinate={{ latitude: p.event.location.lat, longitude: p.event.location.lng }}
-                pinColor={pinColor(p.event)}
+                pinColor={classify(p.event).color}
                 onPress={() => setSelected(p)}
               />
             ))}
           </MapView>
         ) : (
           <View style={styles.mapLoading}>
-            <ActivityIndicator color="#e8442e" />
+            <ActivityIndicator color={colors.brand.primary} />
+          </View>
+        )}
+        {noDrivesYet && (
+          <View style={styles.emptyOverlay} pointerEvents="none">
+            <EmptyState
+              icon="cloud-offline-outline"
+              title="No drives yet"
+              message="Once drivers start contributing, their trips will appear here."
+            />
           </View>
         )}
       </View>
@@ -187,20 +189,18 @@ export default function AdminScreen({ onClose }: AdminScreenProps) {
             <Text style={styles.detailTitle}>
               {selected.event.classification.replace("_", " ")}
             </Text>
-            <Pressable onPress={() => setSelected(null)} hitSlop={10}>
-              <Text style={styles.detailClose}>×</Text>
-            </Pressable>
+            <IconButton icon="close" onPress={() => setSelected(null)} accessibilityLabel="Close detail" />
           </View>
           <View style={styles.aiBadgeRow}>
-            <Text style={styles.aiBadgeText}>🤖 {selected.event.modelVersion}</Text>
+            <Badge label={selected.event.modelVersion} icon="hardware-chip-outline" tone="neutral" />
           </View>
           <DetailRow
             label="Label"
             value={selected.label === "pothole" ? "Confirmed pothole" : "Not a pothole"}
           />
-          <DetailRow label="Severity" value={`${Math.round(selected.event.severity * 100)}%`} />
-          <DetailRow label="AI confidence" value={`${Math.round(selected.event.confidence * 100)}%`} />
-          <DetailRow label="Speed" value={`${(selected.event.speedMps * 2.237).toFixed(0)} mph`} />
+          <DetailRow label="Severity" value={`${Math.round(selected.event.severity * 100)}%`} numeric />
+          <DetailRow label="AI confidence" value={`${Math.round(selected.event.confidence * 100)}%`} numeric />
+          <DetailRow label="Speed" value={`${(selected.event.speedMps * 2.237).toFixed(0)} mph`} numeric />
           <DetailRow label="Captured" value={new Date(selected.event.capturedAt).toLocaleString()} />
           <DetailRow label="Drive" value={selected.driveId} />
           <DetailRow label="Driver" value={selected.ownerEmail ?? selected.uid} />
@@ -210,53 +210,52 @@ export default function AdminScreen({ onClose }: AdminScreenProps) {
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({ label, value, numeric }: { label: string; value: string; numeric?: boolean }) {
   return (
     <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
+      <Text style={[styles.detailValue, numeric && styles.detailValueNumeric]}>{value}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#f6f7f9", paddingTop: 52 },
-  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 8 },
-  backText: { color: "#e8442e", fontSize: 15, fontWeight: "600", marginRight: 14 },
-  title: { fontSize: 18, fontWeight: "800", color: "#1a1d21" },
-  metricsScroll: { flexGrow: 0, height: 46, marginBottom: 8 },
-  metricsRow: { paddingHorizontal: 16, gap: 8, alignItems: "center" },
+  screen: { flex: 1, backgroundColor: colors.neutral.bg, paddingTop: 52 },
+  headerWrap: { paddingHorizontal: space.lg },
+  metricsScroll: { flexGrow: 0, height: 46, marginBottom: space.sm },
+  metricsRow: { paddingHorizontal: space.lg, gap: space.sm, alignItems: "center" },
   metricCard: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
+    backgroundColor: colors.neutral.surface,
+    borderRadius: radii.sm,
     paddingVertical: 5,
-    paddingHorizontal: 10,
+    paddingHorizontal: space.md,
     width: 118,
-    shadowColor: "#1a1d21",
+    shadowColor: colors.neutral.ink,
     shadowOpacity: 0.05,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 1 },
     elevation: 1,
   },
   metricLabel: {
+    fontFamily: fontFamily.bodySemibold,
     fontSize: 9,
-    fontWeight: "700",
-    color: "#8a939d",
+    color: colors.neutral.inkFaint,
     textTransform: "uppercase",
     letterSpacing: 0.3,
   },
-  metricValue: { fontSize: 15, fontWeight: "800", color: "#1a1d21", marginTop: 1 },
+  metricValue: { fontFamily: fontFamily.mono, fontSize: 15, color: colors.neutral.ink, marginTop: 1 },
   mapWrap: { flex: 1 },
   map: { flex: 1 },
   mapLoading: { flex: 1, alignItems: "center", justifyContent: "center" },
+  emptyOverlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   detailCard: {
     position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 24,
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 16,
+    left: space.lg,
+    right: space.lg,
+    bottom: space.xxl,
+    backgroundColor: colors.neutral.surface,
+    borderRadius: radii.lg,
+    padding: space.lg,
     shadowColor: "#000",
     shadowOpacity: 0.15,
     shadowRadius: 10,
@@ -264,17 +263,16 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   detailHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  detailTitle: { fontSize: 17, fontWeight: "800", color: "#1a1d21", textTransform: "capitalize" },
+  detailTitle: { fontFamily: fontFamily.bodyBold, fontSize: 17, color: colors.neutral.ink, textTransform: "capitalize" },
   aiBadgeRow: { marginTop: 4, marginBottom: 4 },
-  aiBadgeText: { fontSize: 11, fontWeight: "700", color: "#5b6570" },
-  detailClose: { fontSize: 22, color: "#8a939d" },
   detailRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 5,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eef0f2",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.neutral.divider,
   },
-  detailLabel: { fontSize: 13, color: "#8a939d" },
-  detailValue: { fontSize: 13, fontWeight: "600", color: "#1a1d21" },
+  detailLabel: { fontFamily: fontFamily.body, fontSize: 13, color: colors.neutral.inkFaint },
+  detailValue: { fontFamily: fontFamily.bodySemibold, fontSize: 13, color: colors.neutral.ink },
+  detailValueNumeric: { fontFamily: fontFamily.monoMedium },
 });
