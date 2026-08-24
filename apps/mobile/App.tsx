@@ -5,6 +5,7 @@ import {
   Alert,
   Animated,
   FlatList,
+  Image,
   Pressable,
   ScrollView,
   Share,
@@ -1164,7 +1165,10 @@ export default function App() {
           <View style={styles.menuBtnWrap}>
             <IconButton icon="menu-outline" onPress={() => setNavOpen(true)} accessibilityLabel="Open menu" />
           </View>
-          <Text style={styles.homeTitle}>StreetSmart</Text>
+          <View style={styles.brandRow}>
+            <Image source={require("./assets/brand/mark.png")} style={styles.brandMark} resizeMode="cover" />
+            <Text style={styles.homeTitle}>StreetSmart</Text>
+          </View>
           <Text style={styles.homeTagline}>Every commute is a road survey.</Text>
         </View>
 
@@ -1260,6 +1264,8 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 1,
   },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  brandMark: { width: 36, height: 36, borderRadius: radii.sm, overflow: "hidden" },
   homeTitle: { ...typeScale.display },
   homeTagline: { fontFamily: fontFamily.body, fontSize: 15, color: colors.neutral.inkSoft, marginTop: 4 },
   heroGroup: { marginBottom: space.xxl },
