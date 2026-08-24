@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,7 +13,7 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { useAuth } from "../auth/AuthContext";
 import { Button, Card } from "../components/ui";
-import { colors, fontFamily, radii, space, typeScale } from "../theme";
+import { colors, fontFamily, radii, space } from "../theme";
 
 function authErrorMessage(err: unknown): string {
   const code = (err as { code?: string })?.code ?? "";
@@ -71,8 +72,12 @@ export default function SignInScreen() {
     >
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <Text style={typeScale.display}>StreetSmart</Text>
-        <Text style={styles.tagline}>Every commute is a road survey.</Text>
+        <Image
+          source={require("../assets/brand/logo-stacked.png")}
+          style={styles.logo}
+          resizeMode="contain"
+          accessibilityLabel="StreetSmart"
+        />
       </View>
 
       <Card>
@@ -150,7 +155,7 @@ const styles = StyleSheet.create({
     padding: space.xxl,
   },
   header: { marginBottom: space.xxl + space.xs, alignItems: "center" },
-  tagline: { fontFamily: fontFamily.body, fontSize: 15, color: colors.neutral.inkSoft, marginTop: 4 },
+  logo: { width: 220, height: 220 },
   cardTitle: { fontFamily: fontFamily.bodyBold, fontSize: 18, color: colors.neutral.ink, marginBottom: space.md },
   input: {
     alignSelf: "stretch",

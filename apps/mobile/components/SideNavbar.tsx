@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Animated, Dimensions, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Dimensions, Image, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, fontFamily, radii, space } from "../theme";
 
@@ -77,6 +77,11 @@ export default function SideNavbar({
         </Animated.View>
 
         <Animated.View style={[styles.drawer, { width: DRAWER_WIDTH, transform: [{ translateX: slide }] }]}>
+          <View style={styles.brandRow}>
+            <Image source={require("../assets/brand/mark.png")} style={styles.brandMark} resizeMode="cover" />
+            <Text style={styles.brandWordmark}>StreetSmart</Text>
+          </View>
+
           <View style={styles.profile}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{initial}</Text>
@@ -148,6 +153,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 4, height: 0 },
     elevation: 8,
   },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: space.xl },
+  brandMark: { width: 28, height: 28, borderRadius: radii.sm, overflow: "hidden" },
+  brandWordmark: { fontFamily: fontFamily.display, fontSize: 17, color: colors.neutral.ink },
   profile: { alignItems: "flex-start", marginBottom: space.md },
   avatar: {
     width: 56,

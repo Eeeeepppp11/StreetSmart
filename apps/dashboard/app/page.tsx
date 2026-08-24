@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import Image from "next/image";
 import { buildScorecard, buildRouteRiskExport } from "@potholeproof/analytics";
 import {
   AS_OF,
@@ -46,7 +47,15 @@ export default function Page() {
 
   return (
     <main style={{ maxWidth: 880, margin: "0 auto", padding: "2rem 1rem" }}>
-      <h1 style={{ marginBottom: 4 }}>StreetSmart · Repair Scorecards</h1>
+      <Image
+        src="/brand/logo-horizontal.png"
+        alt="StreetSmart"
+        width={280}
+        height={140}
+        style={{ width: 220, height: "auto", marginBottom: 8 }}
+        priority
+      />
+      <h1 style={{ marginBottom: 4, fontSize: 20 }}>Repair Scorecards</h1>
       <p style={{ color: "#5b6570", marginTop: 0 }}>
         How fast does the city fix what drivers report? Rendered by the same
         aggregation engine that will serve live data.{" "}
