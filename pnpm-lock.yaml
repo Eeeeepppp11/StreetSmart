@@ -63,12 +63,21 @@ importers:
       '@potholeproof/alert-settings':
         specifier: workspace:*
         version: link:../../packages/alert-settings
+      '@potholeproof/civic':
+        specifier: workspace:^
+        version: link:../../services/civic
       '@potholeproof/detector':
         specifier: workspace:*
         version: link:../../packages/detector
       '@potholeproof/geo':
         specifier: workspace:*
         version: link:../../packages/geo
+      '@potholeproof/hazard-engine':
+        specifier: workspace:^
+        version: link:../../services/hazard-engine
+      '@potholeproof/proximity':
+        specifier: workspace:^
+        version: link:../../packages/proximity
       '@potholeproof/routing':
         specifier: workspace:*
         version: link:../../services/routing

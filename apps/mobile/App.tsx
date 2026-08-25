@@ -24,11 +24,14 @@ import * as Speech from "expo-speech";
 import { DetectionPipeline, makeSamples, classifyWithModel } from "@potholeproof/detector";
 import type { GpsFix } from "@potholeproof/detector";
 import type { JoltEvent, LatLng, SensorSample, Vec3 } from "@potholeproof/shared-types";
+import { toHazardCell } from "@potholeproof/geo";
 import { useAuth } from "./auth/AuthContext";
 import { Badge, Button, Card, ConfidenceBar, EmptyState, IconButton, SeverityBadge } from "./components/ui";
 import { classify, colors, durations, fontFamily, radii, space, typeScale, useAppFonts, useCountUp, usePhaseFade } from "./theme";
 import SignInScreen from "./screens/SignInScreen";
 import AdminScreen from "./screens/AdminScreen";
+import LeaderboardScreen from "./screens/LeaderboardScreen";
+import NotificationsScreen from "./screens/NotificationsScreen";
 import NavigateScreen from "./screens/NavigateScreen";
 import ModelInfoScreen from "./screens/ModelInfoScreen";
 import CompareScreen from "./screens/CompareScreen";
@@ -41,6 +44,9 @@ import {
   upsertUserProfile,
   type CloudDrive,
 } from "./cloudDrives";
+import { subscribeToMyCivicReports } from "./civicMock";
+import { recordHazardContribution } from "./hazardReports";
+import { addNotification, loadNotifications, markAllNotificationsRead, type AppNotification } from "./notifications";
 
 const G = 9.81; // expo-sensors accelerometer reports g-force incl. gravity
 const SENSOR_INTERVAL_MS = 20; // request ~50 Hz
@@ -79,7 +85,9 @@ type Phase =
   | "admin"
   | "navigate"
   | "modelInfo"
-  | "compare";
+  | "compare"
+  | "leaderboard"
+  | "notifications";
 
 /** Stable grouping key — falls back to the capture date for data saved before driveId existed. */
 function driveKeyOf(item: LabeledEvent): string {
@@ -283,6 +291,7 @@ export default function App() {
   const [routePoints, setRoutePoints] = useState<LatLng[]>([]);
   const [syncingAll, setSyncingAll] = useState(false);
   const [cloudDrives, setCloudDrives] = useState<CloudDrive[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const cloudEventCount = cloudDrives.reduce((sum, d) => sum + d.items.length, 0);
   const animatedEventCount = useCountUp(cloudEventCount);
   const fade = usePhaseFade(phase);
@@ -314,13 +323,51 @@ export default function App() {
     if (!user) {
       setSavedCount(null);
       setCloudDrives([]);
+      setNotifications([]);
       return;
     }
     AsyncStorage.getItem(storageKeyFor(user.uid)).then((raw) =>
       setSavedCount(raw ? (JSON.parse(raw) as unknown[]).length : 0)
     );
+    loadNotifications(user.uid).then(setNotifications);
     syncCloud("profile", () => upsertUserProfile(user.uid, user.email, user.displayName));
     return subscribeToUserDrives(user.uid, setCloudDrives);
+  }, [user]);
+
+  /** In-app "your report got fixed" notification — no real push (Expo Go,
+   *  SDK 54, dropped remote push at SDK 53), so this checks live via
+   *  onSnapshot while the app is open and again on every cold start. */
+  useEffect(() => {
+    if (!user) return;
+    const seenKey = `pp.seenFixedReports.${user.uid}`;
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+
+    // Wait for the seen-set to load before subscribing — otherwise the first
+    // snapshot can fire before `seen` is populated and silently drop a
+    // genuinely-new notification instead of just being skipped-and-retried.
+    AsyncStorage.getItem(seenKey).then((raw) => {
+      if (cancelled) return;
+      const seen = new Set<string>(raw ? JSON.parse(raw) : []);
+      unsub = subscribeToMyCivicReports(user.uid, (reports) => {
+        const newlyClosed = reports.filter((r) => r.status === "closed" && !seen.has(r.id));
+        if (newlyClosed.length === 0) return;
+        for (const r of newlyClosed) seen.add(r.id);
+        void AsyncStorage.setItem(seenKey, JSON.stringify([...seen]));
+        const title = newlyClosed.length === 1 ? "Pothole fixed!" : "Potholes fixed!";
+        const body =
+          newlyClosed.length === 1
+            ? "The city confirmed a pothole you reported has been repaired."
+            : `The city confirmed ${newlyClosed.length} potholes you reported have been repaired.`;
+        Alert.alert(title, body);
+        void addNotification(user.uid, { title, body }).then(setNotifications);
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
   }, [user]);
 
   if (!fontsLoaded || initializing) {
@@ -544,6 +591,9 @@ export default function App() {
           routeRef.current
         )
       );
+      for (const l of labeled) {
+        if (l.label === "pothole") void recordHazardContribution(toHazardCell(l.event.location), uid);
+      }
     }
     setSavedCount(merged.length);
     setEvents([]);
@@ -779,6 +829,9 @@ export default function App() {
             routePoints
           )
         );
+        for (const l of updated) {
+          if (l.label === "pothole") void recordHazardContribution(toHazardCell(l.event.location), uid);
+        }
       } else {
         syncCloud("delete drive", () => deleteDriveFromCloud(uid, editingDriveId));
       }
@@ -1094,6 +1147,14 @@ export default function App() {
     return <AdminScreen onClose={() => setPhase("idle")} />;
   }
 
+  if (phase === "leaderboard") {
+    return <LeaderboardScreen onClose={() => setPhase("idle")} />;
+  }
+
+  if (phase === "notifications") {
+    return <NotificationsScreen notifications={notifications} onClose={() => setPhase("idle")} />;
+  }
+
   if (phase === "navigate") {
     return <NavigateScreen onClose={() => setPhase("idle")} />;
   }
@@ -1149,11 +1210,17 @@ export default function App() {
         email={user.email}
         contributedCount={cloudEventCount}
         isAdmin={isAdminEmail(user.email)}
+        unreadNotifications={notifications.filter((n) => !n.read).length}
         onNavigate={() => setPhase("navigate")}
         onContribute={startDrive}
         onOpenLibrary={openLibrary}
         onOpenAdmin={() => setPhase("admin")}
         onOpenModelInfo={() => setPhase("modelInfo")}
+        onOpenLeaderboard={() => setPhase("leaderboard")}
+        onOpenNotifications={() => {
+          setPhase("notifications");
+          void markAllNotificationsRead(uid).then(setNotifications);
+        }}
         onLogOut={logOut}
       />
       <ScrollView

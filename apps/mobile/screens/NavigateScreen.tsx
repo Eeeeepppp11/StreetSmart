@@ -31,16 +31,29 @@ import {
   type AlertSensitivity,
   type AlertSettings,
 } from "@potholeproof/alert-settings";
-import type { JoltEvent, LatLng, SensorSample, Vec3 } from "@potholeproof/shared-types";
-import { distanceMeters } from "@potholeproof/geo";
+import { upcomingHazards, type ProximityAlert } from "@potholeproof/proximity";
+import type { HazardRecord, JoltEvent, LatLng, SensorSample, Vec3 } from "@potholeproof/shared-types";
+import { bearingDegrees, distanceMeters, toHazardCell } from "@potholeproof/geo";
 import { chooseRoute, type RouteScore } from "@potholeproof/routing";
 import { fetchRouteAlternatives } from "../nav/osrm";
 import { reverseGeocode, searchAddress, type GeocodeResult } from "../nav/geocode";
 import { cumulativePathMeters, formatDistanceImperial, routeProgress } from "../nav/guidance";
 import { hazardsFromJolts } from "../nav/hazards";
 import type { NavRoute } from "../nav/types";
-import { Button, Card, IconButton, ScreenHeader, SegmentedControl } from "../components/ui";
-import { classify, colors, fontFamily, radii, space, typeScale, usePhaseFade } from "../theme";
+import { Badge, Button, Card, IconButton, ScreenHeader, SegmentedControl } from "../components/ui";
+import { ReportSheet } from "../components/ReportSheet";
+import { classify, classifyHazard, colors, fontFamily, radii, space, typeScale, usePhaseFade } from "../theme";
+import { useAuth } from "../auth/AuthContext";
+import { useCrowdHazards } from "../hazardMap";
+import { fileHazardReport, recordHazardContribution } from "../hazardReports";
+import { fileMockCivicReport, isEligibleForCivicReport } from "../civicMock";
+import {
+  clearPresence,
+  isPresenceStale,
+  publishPresence,
+  subscribeToLivePresence,
+  type LivePresenceDoc,
+} from "../livePresence";
 
 /**
  * Live map navigation with hazard-aware routing. Detections here are
@@ -85,6 +98,8 @@ const MIN_SEARCH_QUERY_LENGTH = 3;
 const ROAD_SNAP_CONNECTOR_METERS = 20;
 const CONNECTOR_DASH_PATTERN = [1, 8];
 const ALT_ROUTE_COLOR = colors.neutral.inkSoft;
+const HAZARD_BANNER_MS = 6000;
+const PRESENCE_PUBLISH_EVERY_N_TICKS = 3;
 
 function needsRoadSnapConnector(point: LatLng | null, onRoute: LatLng | undefined): boolean {
   if (!point || !onRoute) return false;
@@ -96,8 +111,18 @@ interface NavigateScreenProps {
 }
 
 export default function NavigateScreen({ onClose }: NavigateScreenProps) {
+  const { user } = useAuth();
+  const uid = user!.uid;
+  const displayName = user!.displayName;
+
   const [phase, setPhase] = useState<NavPhase>("plan");
   const fade = usePhaseFade(phase);
+  const { hazards: crowdHazards, contributorCounts } = useCrowdHazards();
+  const [otherDrivers, setOtherDrivers] = useState<LivePresenceDoc[]>([]);
+  const [reportSheetVisible, setReportSheetVisible] = useState(false);
+  const [hazardBanner, setHazardBanner] = useState<{ text: string } | null>(null);
+  const [selectedHazard, setSelectedHazard] = useState<HazardRecord | null>(null);
+  const [filingReport, setFilingReport] = useState(false);
   const [events, setEvents] = useState<JoltEvent[]>([]);
   const [speedMps, setSpeedMps] = useState(0);
   const [sampleHz, setSampleHz] = useState(0);
@@ -140,6 +165,11 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
 
   const eventsRef = useRef<JoltEvent[]>([]);
   const avoidRoughRef = useRef(true);
+  const crowdHazardsRef = useRef<HazardRecord[]>([]);
+  const lastFixRef = useRef<LatLng | null>(null);
+  const lastAlertedIdRef = useRef<string | null>(null);
+  const presenceTickRef = useRef(0);
+  const hazardBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nav = useRef<{
     route: NavRoute;
     cum: number[];
@@ -162,8 +192,15 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
       if (drainTimer.current) clearInterval(drainTimer.current);
       for (const s of subs.current) s.remove();
       Speech.stop();
+      void clearPresence(uid);
     };
   }, []);
+
+  // GPS callbacks close over this once per startDrive() call, so proximity
+  // checks need a ref mirror to see freshly-streamed crowd data mid-drive.
+  useEffect(() => {
+    crowdHazardsRef.current = crowdHazards;
+  }, [crowdHazards]);
 
   function updateAlertSettings(patch: Partial<AlertSettings>) {
     setAlertSettings((prev) => {
@@ -258,6 +295,21 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
     }
   }
 
+  /** Same alert-mode rules as announceBundle, for a crowd hazard ahead rather
+   *  than something this drive just detected. Shares the nav banner slot. */
+  function surfaceProximityAlert(alert: ProximityAlert) {
+    const mode = alertSettingsRef.current.mode;
+    const text = `${alert.hazard.severityBand} pothole ${alert.side}`;
+    if (hazardBannerTimer.current) clearTimeout(hazardBannerTimer.current);
+    setHazardBanner({ text });
+    hazardBannerTimer.current = setTimeout(() => setHazardBanner(null), HAZARD_BANNER_MS);
+    if (mode !== "silent") Vibration.vibrate(150);
+    if (mode === "voice_haptic") {
+      Speech.stop();
+      Speech.speak(text, { rate: 1.05 });
+    }
+  }
+
   async function enterPlan() {
     const perm = await Location.requestForegroundPermissionsAsync();
     if (perm.status !== "granted") {
@@ -293,7 +345,7 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
       const routes = await fetchRouteAlternatives(from, destination);
       const { index, scores } = chooseRoute(
         routes.map((r) => r.path),
-        hazardsFromJolts(eventsRef.current),
+        [...hazardsFromJolts(eventsRef.current), ...crowdHazardsRef.current],
         { avoidSevereRoadDamage: avoidRoughRef.current }
       );
       setRouteOptions(routes);
@@ -379,7 +431,7 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
     if (routeOptions.length === 0) return;
     const { index } = chooseRoute(
       routeOptions.map((r) => r.path),
-      hazardsFromJolts(eventsRef.current),
+      [...hazardsFromJolts(eventsRef.current), ...crowdHazardsRef.current],
       { avoidSevereRoadDamage: avoid }
     );
     setRouteChoice(index);
@@ -430,7 +482,7 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
       if (routes.length === 0 || !nav.current) return;
       const { index } = chooseRoute(
         routes.map((r) => r.path),
-        hazardsFromJolts(eventsRef.current),
+        [...hazardsFromJolts(eventsRef.current), ...crowdHazardsRef.current],
         { avoidSevereRoadDamage: avoidRoughRef.current }
       );
       const next = routes[index]!;
@@ -469,6 +521,11 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
       setNavBanner(null);
     }
 
+    lastFixRef.current = null;
+    lastAlertedIdRef.current = null;
+    presenceTickRef.current = 0;
+    subs.current.push({ remove: subscribeToLivePresence(setOtherDrivers) });
+
     Gyroscope.setUpdateInterval(SENSOR_INTERVAL_MS);
     Accelerometer.setUpdateInterval(SENSOR_INTERVAL_MS);
     subs.current.push(Gyroscope.addListener((g) => { lastGyro.current = { x: g.x, y: g.y, z: g.z }; }));
@@ -494,6 +551,27 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
           setSpeedMps(Math.max(0, loc.coords.speed ?? 0));
           setLiveFix({ lat: fix.location.lat, lng: fix.location.lng });
           handleNavFix(fix);
+
+          // Proximity: derive heading from the last fix when the device
+          // doesn't report one (only unavailable on the very first tick).
+          const headingDeg = fix.heading ?? (lastFixRef.current ? bearingDegrees(lastFixRef.current, fix.location) : null);
+          lastFixRef.current = fix.location;
+          if (headingDeg !== null) {
+            const alerts = upcomingHazards(
+              { position: fix.location, headingDegrees: headingDeg, speedMps: fix.speedMps },
+              crowdHazardsRef.current
+            );
+            if (alerts[0] && alerts[0].hazard.id !== lastAlertedIdRef.current) {
+              lastAlertedIdRef.current = alerts[0].hazard.id;
+              surfaceProximityAlert(alerts[0]);
+            }
+          }
+
+          // Live presence, throttled — not every tick.
+          presenceTickRef.current += 1;
+          if (presenceTickRef.current % PRESENCE_PUBLISH_EVERY_N_TICKS === 0) {
+            void publishPresence(uid, displayName, fix);
+          }
         }
       )
     );
@@ -518,17 +596,31 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
   function stopDrive() {
     if (drainTimer.current) clearInterval(drainTimer.current);
     drainTimer.current = null;
+    if (hazardBannerTimer.current) clearTimeout(hazardBannerTimer.current);
     for (const s of subs.current) s.remove();
     subs.current = [];
     pipeline.current?.flush();
     pipeline.current = null;
     bundler.current = null;
     Speech.stop();
+    void clearPresence(uid);
+    setOtherDrivers([]);
+    setHazardBanner(null);
     nav.current = null;
     setNavPath(null);
     setNavBanner(null);
     setPhase("plan");
     void enterPlan();
+  }
+
+  async function reportSelectedHazardToCity() {
+    if (!selectedHazard) return;
+    setFilingReport(true);
+    try {
+      await fileMockCivicReport(selectedHazard, uid);
+    } finally {
+      setFilingReport(false);
+    }
   }
 
   const chosen: NavRoute | undefined = routeOptions[routeChoice];
@@ -551,10 +643,16 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
             <Text style={styles.driveStat}>jolt{events.length === 1 ? "" : "s"} detected</Text>
           </View>
         </View>
-        {navBanner && (
+        {(navBanner || hazardBanner) && (
           <View style={styles.navBanner}>
-            {navBanner.dist !== "" && <Text style={styles.navBannerDist}>{navBanner.dist}</Text>}
-            <Text style={styles.navBannerText}>{navBanner.text}</Text>
+            {navBanner ? (
+              <Fragment>
+                {navBanner.dist !== "" && <Text style={styles.navBannerDist}>{navBanner.dist}</Text>}
+                <Text style={styles.navBannerText}>{navBanner.text}</Text>
+              </Fragment>
+            ) : (
+              <Text style={styles.navBannerText}>{hazardBanner!.text}</Text>
+            )}
           </View>
         )}
         <View style={styles.liveMapWrap}>
@@ -605,6 +703,28 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
               {events.map((e) => (
                 <Marker key={e.id} coordinate={{ latitude: e.location.lat, longitude: e.location.lng }} pinColor={classify(e).color} />
               ))}
+              {crowdHazards.map((h) => (
+                <Marker
+                  key={h.id}
+                  coordinate={{ latitude: h.location.lat, longitude: h.location.lng }}
+                  pinColor={classifyHazard(h).color}
+                  opacity={0.75}
+                  onPress={() => setSelectedHazard(h)}
+                />
+              ))}
+              {otherDrivers
+                .filter((d) => d.uid !== uid && !isPresenceStale(d))
+                .map((d) => (
+                  <Marker
+                    key={d.uid}
+                    coordinate={{ latitude: d.location.lat, longitude: d.location.lng }}
+                    anchor={{ x: 0.5, y: 0.5 }}
+                    flat
+                    rotation={d.headingDegrees ?? 0}
+                  >
+                    <View style={styles.otherDriverDot} />
+                  </Marker>
+                ))}
             </MapView>
           ) : (
             <View style={styles.liveMapWaiting}>
@@ -617,8 +737,51 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
               <IconButton icon="locate" variant="floating" onPress={recenterDriveMap} accessibilityLabel="Recenter map" />
             </View>
           )}
+          {liveFix && (
+            <View style={styles.reportWrap}>
+              <IconButton icon="add-circle" variant="floating" onPress={() => setReportSheetVisible(true)} accessibilityLabel="Report hazard" />
+            </View>
+          )}
+          {selectedHazard && (
+            <Card style={styles.hazardDetailCard}>
+              <View style={styles.hazardDetailHeaderRow}>
+                <Badge {...classifyHazard(selectedHazard)} />
+                <IconButton icon="close" onPress={() => setSelectedHazard(null)} accessibilityLabel="Close" />
+              </View>
+              <Text style={styles.hazardDetailMeta}>
+                {contributorCounts[selectedHazard.id] ?? 0} driver{(contributorCounts[selectedHazard.id] ?? 0) === 1 ? "" : "s"} reported ·{" "}
+                {Math.round(selectedHazard.confidence * 100)}% confidence
+              </Text>
+              {selectedHazard.status === "reported" ? (
+                <Text style={styles.hazardDetailMeta}>Already reported to the city.</Text>
+              ) : isEligibleForCivicReport(selectedHazard) ? (
+                <Button
+                  label="Report to city"
+                  onPress={reportSelectedHazardToCity}
+                  loading={filingReport}
+                  variant="outline"
+                  size="sm"
+                  icon="megaphone-outline"
+                  style={styles.hazardDetailBtn}
+                />
+              ) : (
+                <Text style={styles.hazardDetailMeta}>Needs more confirmations before it can be filed.</Text>
+              )}
+            </Card>
+          )}
         </View>
         <Button label="End navigation" onPress={stopDrive} variant="danger" size="lg" icon="close-circle-outline" style={styles.stopBtnMargin} />
+        <ReportSheet
+          visible={reportSheetVisible}
+          onClose={() => setReportSheetVisible(false)}
+          onSubmit={(classification, severity) => {
+            if (!liveFix) return;
+            const location = { lat: liveFix.lat, lng: liveFix.lng };
+            const hazardId = toHazardCell(location);
+            void fileHazardReport(uid, null, location, classification, severity);
+            void recordHazardContribution(hazardId, uid);
+          }}
+        />
       </Animated.View>
     );
   }
@@ -777,6 +940,15 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
           })}
           {origin && <Marker coordinate={{ latitude: origin.lat, longitude: origin.lng }} pinColor={colors.status.info} title="Start" />}
           {dest && <Marker coordinate={{ latitude: dest.lat, longitude: dest.lng }} pinColor={colors.status.success} title="Destination" />}
+          {crowdHazards.map((h) => (
+            <Marker
+              key={h.id}
+              coordinate={{ latitude: h.location.lat, longitude: h.location.lng }}
+              pinColor={classifyHazard(h).color}
+              opacity={0.75}
+              title={classifyHazard(h).label}
+            />
+          ))}
         </MapView>
       </View>
       {routeBusy && (
@@ -904,6 +1076,22 @@ const styles = StyleSheet.create({
   liveMap: { flex: 1 },
   liveMapWaiting: { flex: 1, alignItems: "center", justifyContent: "center" },
   carDot: { width: 18, height: 18, borderRadius: 9, backgroundColor: colors.status.info, borderWidth: 3, borderColor: colors.white },
+  otherDriverDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.neutral.ink, borderWidth: 2, borderColor: colors.white },
   recenterWrap: { position: "absolute", right: space.lg, bottom: space.lg },
+  reportWrap: { position: "absolute", left: space.lg, bottom: space.lg },
+  hazardDetailCard: {
+    position: "absolute",
+    left: space.lg,
+    right: space.lg,
+    bottom: space.lg,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  hazardDetailHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  hazardDetailMeta: { fontFamily: fontFamily.bodyMedium, fontSize: 12, color: colors.neutral.inkSoft, marginTop: space.sm },
+  hazardDetailBtn: { marginTop: space.sm },
   stopBtnMargin: { marginHorizontal: space.lg, marginVertical: space.lg },
 });

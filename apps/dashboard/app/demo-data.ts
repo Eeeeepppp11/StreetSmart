@@ -25,17 +25,27 @@ export function tileOf(loc: LatLng): string {
   return `tile-${Math.round(loc.lat * 100)}`;
 }
 
+/** Which city a hazard belongs to — a jurisdiction lookup in production.
+ *  Covers both this demo dataset's SF rows and the mobile app's actual
+ *  Bellevue, WA demo-drive location, so the priority queue shows a real
+ *  multi-city ranking rather than one city's cells sorted alphabetically. */
+export function cityOf(loc: LatLng): string {
+  if (loc.lat >= 47.55 && loc.lat <= 47.68) return "Bellevue, WA";
+  return "San Francisco, CA";
+}
+
 function hazard(
   id: string,
   lat: number,
   severity: number,
   status: HazardRecord["status"],
-  lastConfirmed: string
+  lastConfirmed: string,
+  lng = -122.42
 ): HazardRecord {
   return {
     id,
     h3Cell: `cell-${id}`,
-    location: { lat, lng: -122.42 },
+    location: { lat, lng },
     severity,
     severityBand: severity >= 0.67 ? "severe" : severity >= 0.34 ? "moderate" : "minor",
     confidence: 0.85,
@@ -57,6 +67,10 @@ export const HAZARDS: HazardRecord[] = [
   hazard("h6", 37.756, 0.35, "verified_fixed", "2026-06-25T15:00:00.000Z"),
   hazard("h7", 37.74, 0.85, "reported", "2026-07-01T08:00:00.000Z"),
   hazard("h8", 37.741, 0.6, "active", "2026-07-03T20:00:00.000Z"),
+  hazard("h9", 47.61, 0.95, "reported", "2026-07-04T06:00:00.000Z", -122.173),
+  hazard("h10", 47.611, 0.5, "active", "2026-07-03T14:00:00.000Z", -122.174),
+  hazard("h11", 47.62, 0.75, "reported", "2026-07-02T09:00:00.000Z", -122.17),
+  hazard("h12", 47.621, 0.3, "verified_fixed", "2026-06-22T11:00:00.000Z", -122.171),
 ];
 
 function report(
@@ -83,6 +97,9 @@ export const REPORTS: CivicReport[] = [
   report("h5", "submitted", "2026-06-15T09:00:00.000Z"),
   report("h6", "closed", "2026-06-10T09:00:00.000Z", "2026-06-25T15:00:00.000Z"),
   report("h7", "submitted", "2026-07-01T09:00:00.000Z"),
+  report("h9", "submitted", "2026-06-20T09:00:00.000Z"),
+  report("h11", "acknowledged", "2026-06-28T09:00:00.000Z"),
+  report("h12", "closed", "2026-06-08T09:00:00.000Z", "2026-06-22T11:00:00.000Z"),
 ];
 
 export const CONTRIBUTIONS: HazardContribution[] = HAZARDS.flatMap((h, i) =>

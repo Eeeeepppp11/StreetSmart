@@ -97,7 +97,11 @@ export class HazardEngine {
     return this.toPublic(h);
   }
 
-  /** Register a clean pass over a cell; retires the hazard if confidence collapses. */
+  /**
+   * Register a clean pass over a cell. Collapses the hazard once confidence
+   * drops far enough: a previously-reported hazard is verified fixed (the
+   * civic loop closing), anything else just retires.
+   */
   ingestCleanPass(cell: H3Index): HazardRecord | undefined {
     const h = this.cells.get(cell);
     if (!h) return undefined;
@@ -107,8 +111,31 @@ export class HazardEngine {
       h.confidence < this.config.retireThreshold &&
       h.cleanPassCount >= this.config.minCleanToRetire
     ) {
-      h.status = "retired";
+      h.status = h.status === "reported" ? "verified_fixed" : "retired";
     }
+    return this.toPublic(h);
+  }
+
+  /** Marks a hazard as filed with a civic report — the reporting layer's transition. */
+  markReported(cell: H3Index, reportId: Uuid): HazardRecord | undefined {
+    const h = this.cells.get(cell);
+    if (!h) return undefined;
+    h.status = "reported";
+    h.reportId = reportId;
+    return this.toPublic(h);
+  }
+
+  /**
+   * Marks a hazard fixed on external confirmation (the city closed the
+   * report) rather than clean-pass evidence — a direct status stamp, no
+   * confidence math involved. Sibling to `ingestCleanPass`'s own
+   * `"reported"→"verified_fixed"` transition for when a client can't collect
+   * clean-pass evidence itself but has an authoritative "it's fixed" signal.
+   */
+  markVerifiedFixed(cell: H3Index): HazardRecord | undefined {
+    const h = this.cells.get(cell);
+    if (!h) return undefined;
+    h.status = "verified_fixed";
     return this.toPublic(h);
   }
 
