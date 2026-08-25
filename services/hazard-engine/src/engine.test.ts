@@ -82,6 +82,46 @@ test("a retired hazard reactivates once detections outweigh clean passes", () =>
   assert.equal(last.status, "active");
 });
 
+test("markReported flips status and stamps reportId", () => {
+  const e = new HazardEngine(makeDeps());
+  const cell = gridCell(A);
+  e.ingestEvent(event(A));
+  const h = e.markReported(cell, "report-1")!;
+  assert.equal(h.status, "reported");
+  assert.equal(h.reportId, "report-1");
+});
+
+test("markReported on an unknown cell is a no-op", () => {
+  const e = new HazardEngine(makeDeps());
+  assert.equal(e.markReported("nowhere", "report-1"), undefined);
+});
+
+test("clean passes verify a reported hazard fixed instead of just retiring it", () => {
+  const e = new HazardEngine(makeDeps());
+  const cell = gridCell(A);
+  e.ingestEvent(event(A));
+  e.markReported(cell, "report-1");
+  e.ingestCleanPass(cell);
+  const after2 = e.ingestCleanPass(cell);
+  assert.equal(after2!.status, "reported"); // not enough clean passes yet
+  const after3 = e.ingestCleanPass(cell);
+  assert.equal(after3!.status, "verified_fixed");
+  assert.equal(after3!.reportId, "report-1");
+});
+
+test("markVerifiedFixed stamps status directly, no clean-pass evidence needed", () => {
+  const e = new HazardEngine(makeDeps());
+  const cell = gridCell(A);
+  e.ingestEvent(event(A));
+  const h = e.markVerifiedFixed(cell)!;
+  assert.equal(h.status, "verified_fixed");
+});
+
+test("markVerifiedFixed on an unknown cell is a no-op", () => {
+  const e = new HazardEngine(makeDeps());
+  assert.equal(e.markVerifiedFixed("nowhere"), undefined);
+});
+
 test("clean pass on an unknown cell is a no-op", () => {
   const e = new HazardEngine(makeDeps());
   assert.equal(e.ingestCleanPass("nowhere"), undefined);

@@ -6,8 +6,10 @@ import type { HazardRecord, JoltEvent } from "@potholeproof/shared-types";
  * felt — e.g. the return leg of a drive, or a mid-drive reroute.
  *
  * These records are EPHEMERAL: built on demand from in-memory events, never
- * persisted, never sent anywhere. When crowd hazard tiles land (Phase-2),
- * they replace this as the scoring input.
+ * persisted, never sent anywhere. Crowd hazard tiles (apps/mobile/hazardMap.ts,
+ * `useCrowdHazards`) now also feed route scoring alongside this — this session's
+ * own not-yet-synced jolts still need their own bridge, since they lag the
+ * crowd feed by definition (nothing's uploaded until the drive is saved).
  */
 export function hazardsFromJolts(
   events: readonly JoltEvent[]

@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { buildScorecard, buildRouteRiskExport } from "@potholeproof/analytics";
 import {
   AS_OF,
@@ -59,7 +60,10 @@ export default function Page() {
       <p style={{ color: "#5b6570", marginTop: 0 }}>
         How fast does the city fix what drivers report? Rendered by the same
         aggregation engine that will serve live data.{" "}
-        <strong>Demo dataset</strong> until the live backend is connected.
+        <strong>Demo dataset</strong> until the live backend is connected.{" "}
+        <Link href="/priorities" style={{ color: "#e8442e" }}>
+          View repair priority queue →
+        </Link>
       </p>
 
       <section style={card}>

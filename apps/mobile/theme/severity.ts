@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 import type { Ionicons } from "@expo/vector-icons";
-import type { JoltEvent } from "@potholeproof/shared-types";
+import type { HazardRecord, JoltEvent } from "@potholeproof/shared-types";
 import { colors } from "./colors";
 
 type IoniconName = ComponentProps<typeof Ionicons>["name"];
@@ -37,4 +37,23 @@ export function classify(e: Pick<JoltEvent, "classification" | "severity">): Cla
     return { color: colors.severity.roughRoad, label: "Rough road", icon: "trail-sign-outline" };
   }
   return { color: colors.severity.neutral, label: "Uncertain", icon: "help-circle-outline" };
+}
+
+/**
+ * Same visual language as `classify()`, keyed off a crowd HazardRecord's
+ * severityBand instead of a JoltEvent's classification+severity — a hazard
+ * doesn't carry a JoltClassification. `status: "reported"` gets its own
+ * badge treatment since it's filed with the city, not just detected.
+ */
+export function classifyHazard(h: Pick<HazardRecord, "severityBand" | "status">): ClassificationInfo {
+  if (h.status === "reported") {
+    return { color: colors.status.info, label: "Reported to city", icon: "megaphone-outline" };
+  }
+  if (h.severityBand === "severe") {
+    return { color: colors.severity.severe, label: "Severe pothole", icon: "alert-circle" };
+  }
+  if (h.severityBand === "moderate") {
+    return { color: colors.severity.moderate, label: "Moderate pothole", icon: "warning" };
+  }
+  return { color: colors.severity.mild, label: "Minor pothole", icon: "warning-outline" };
 }
