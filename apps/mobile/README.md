@@ -5,7 +5,7 @@ The dash-mount test app: reads accelerometer + gyroscope + GPS, runs the
 phone, logs every jolt, and provides the ✓/✗ **review screen whose labels
 become the ML training set**.
 
-Runs in **Expo Go** (SDK **54** — pinned to match the pilot phone's Expo Go;
+Runs in **Expo Go** (SDK **57** — pinned to match the pilot phone's Expo Go;
 bump with `expo install --fix` when the fleet updates) — no native build
 needed, works on iPhone and Android from any dev machine.
 

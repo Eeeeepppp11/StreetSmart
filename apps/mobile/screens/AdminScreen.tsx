@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
   mapWrap: { flex: 1 },
   map: { flex: 1 },
   mapLoading: { flex: 1, alignItems: "center", justifyContent: "center" },
-  emptyOverlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
+  emptyOverlay: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },
   detailCard: {
     position: "absolute",
     left: space.lg,
