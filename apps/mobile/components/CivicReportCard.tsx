@@ -1,10 +1,11 @@
 import type { ComponentProps, ReactNode } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { CIVIC_STATUS_LABEL } from "@potholeproof/civic";
 import type { CivicReportStatus } from "@potholeproof/shared-types";
 import type { CivicReportDoc } from "../civicMock";
 import { Badge, Card } from "./ui";
+import { FullPhoto } from "./FullPhoto";
 import { colors, fontFamily, space } from "../theme";
 
 type IoniconName = ComponentProps<typeof Ionicons>["name"];
@@ -64,7 +65,7 @@ export function CivicReportCard({ report, banner, showFiler, children }: CivicRe
       )}
       {banner && <Text style={styles.banner}>{banner}</Text>}
       {report.notes ? <Text style={styles.notes}>“{report.notes}”</Text> : null}
-      {report.photoUrl ? <Image source={{ uri: report.photoUrl }} style={styles.photo} resizeMode="cover" /> : null}
+      {report.photoUrl ? <FullPhoto uri={report.photoUrl} style={styles.photo} /> : null}
 
       <View style={styles.timeline}>
         {history.map((e, i) => (
@@ -104,7 +105,7 @@ const styles = StyleSheet.create({
     color: colors.neutral.ink,
     marginTop: space.sm,
   },
-  photo: { width: "100%", height: 140, borderRadius: 8, marginTop: space.sm },
+  photo: { marginTop: space.sm },
   timeline: { marginTop: space.md, gap: space.sm },
   timelineRow: { flexDirection: "row", gap: space.sm },
   dot: {
