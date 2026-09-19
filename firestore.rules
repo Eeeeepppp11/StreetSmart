@@ -35,10 +35,14 @@ service cloud.firestore {
     }
 
     // Waze-style "report as you go" taps (apps/mobile/hazardReports.ts).
-    // The owner may edit (type/severity) or retract their own report.
+    // The owner may edit (type/severity) or retract their own report. New
+    // reports must use the id `{hazardCell}_{uid}_{YYYY-MM-DD}`, which is what
+    // makes "one report per user per cell per day" hold server-side.
     match /hazardReports/{reportId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && reportId.matches('^[0-9a-f]+_' + request.auth.uid + '_[0-9]{4}-[0-9]{2}-[0-9]{2}$');
       allow update: if request.auth != null
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == request.auth.uid;
@@ -66,21 +70,26 @@ service cloud.firestore {
     // `{hazardId}_{uid}` for idempotent dedup (apps/mobile/hazardReports.ts).
     match /hazardContributions/{contributionId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && contributionId == request.resource.data.hazardId + '_' + request.auth.uid;
       allow update, delete: if false;
     }
 
     // One vote per user per hazard ("confirm" or "gone"), doc id
-    // `{hazardId}_{uid}` (apps/mobile/hazardVotes.ts). A user may change or
-    // retract ("none") their own vote; nobody else's.
+    // `{hazardId}_{uid}` (apps/mobile/hazardVotes.ts). The id is enforced so a
+    // user can't hold several vote docs per hazard (the map feeds every doc into
+    // the engine). A user may change or retract ("none") their own vote only.
     match /hazardVotes/{voteId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null
         && request.resource.data.uid == request.auth.uid
+        && voteId == request.resource.data.hazardId + '_' + request.auth.uid
         && request.resource.data.vote in ["confirm", "gone", "none"];
       allow update: if request.auth != null
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == request.auth.uid
+        && request.resource.data.hazardId == resource.data.hazardId
         && request.resource.data.vote in ["confirm", "gone", "none"];
       allow delete: if false;
     }
