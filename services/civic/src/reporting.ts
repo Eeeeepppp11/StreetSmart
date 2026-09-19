@@ -55,3 +55,44 @@ export function reconcileReport(
   }
   return report;
 }
+
+/**
+ * Crowd-confirmation gate for the "report to city" affordance. Any hazard can
+ * be confirmed by drivers; it only becomes fileable once enough *distinct*
+ * drivers stand behind it, and severe hazards get a lower bar because they are
+ * the ones worth escalating fastest.
+ */
+export interface CrowdReportingPolicy {
+  /** Distinct confirming drivers needed for a non-severe hazard. */
+  minConfirmers: number;
+  /** Distinct confirming drivers needed for a severe-band hazard. */
+  minConfirmersSevere: number;
+  /** Still refuse below this confidence (heavy "not there" votes drag it down). */
+  minConfidence: number;
+}
+
+export const DEFAULT_CROWD_REPORTING_POLICY: CrowdReportingPolicy = {
+  minConfirmers: 3,
+  minConfirmersSevere: 2,
+  minConfidence: 0.6,
+};
+
+export function confirmersNeeded(
+  hazard: HazardRecord,
+  policy: CrowdReportingPolicy = DEFAULT_CROWD_REPORTING_POLICY
+): number {
+  return hazard.severityBand === "severe" ? policy.minConfirmersSevere : policy.minConfirmers;
+}
+
+/** True when an active, un-filed hazard has enough distinct confirmers to report to the city. */
+export function isCrowdReportable(
+  hazard: HazardRecord,
+  confirmerCount: number,
+  policy: CrowdReportingPolicy = DEFAULT_CROWD_REPORTING_POLICY
+): boolean {
+  return (
+    hazard.status === "active" &&
+    hazard.confidence >= policy.minConfidence &&
+    confirmerCount >= confirmersNeeded(hazard, policy)
+  );
+}

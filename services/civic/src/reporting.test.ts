@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { HazardRecord, CivicReport } from "@potholeproof/shared-types";
-import { hazardsToReport, reconcileReport } from "./reporting.js";
+import { hazardsToReport, reconcileReport, isCrowdReportable, confirmersNeeded } from "./reporting.js";
 
 const ISO = "2026-07-04T00:30:00.000Z";
 
@@ -61,4 +61,24 @@ test("reconcileReport does not touch already-terminal reports", () => {
   assert.equal(closed.status, "closed");
   const rejected = reconcileReport(report("h", "rejected"), haz("h", { status: "retired" }));
   assert.equal(rejected.status, "rejected");
+});
+
+test("non-severe hazards need 3 distinct confirmers to be reportable", () => {
+  const h = haz("mod", { severity: 0.5, severityBand: "moderate" });
+  assert.equal(confirmersNeeded(h), 3);
+  assert.equal(isCrowdReportable(h, 2), false);
+  assert.equal(isCrowdReportable(h, 3), true);
+});
+
+test("severe hazards need only 2 confirmers", () => {
+  const h = haz("sev");
+  assert.equal(confirmersNeeded(h), 2);
+  assert.equal(isCrowdReportable(h, 1), false);
+  assert.equal(isCrowdReportable(h, 2), true);
+});
+
+test("crowd gate still refuses low-confidence or non-active hazards", () => {
+  assert.equal(isCrowdReportable(haz("low", { confidence: 0.4 }), 10), false);
+  assert.equal(isCrowdReportable(haz("filed", { status: "reported" }), 10), false);
+  assert.equal(isCrowdReportable(haz("gone", { status: "retired" }), 10), false);
 });

@@ -47,6 +47,9 @@ import { useAuth } from "../auth/AuthContext";
 import { useCrowdHazards } from "../hazardMap";
 import { fileHazardReport, recordHazardContribution } from "../hazardReports";
 import { fileMockCivicReport, isEligibleForCivicReport } from "../civicMock";
+import { confirmersNeeded } from "@potholeproof/civic";
+// import { isWithinVoteRange, VOTE_RADIUS_M } from "../hazardVotes"; // distance gating disabled for now
+import { castHazardVote, GONE_VOTES_TO_RETIRE } from "../hazardVotes";
 import {
   clearPresence,
   isPresenceStale,
@@ -117,7 +120,7 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
 
   const [phase, setPhase] = useState<NavPhase>("plan");
   const fade = usePhaseFade(phase);
-  const { hazards: crowdHazards, contributorCounts } = useCrowdHazards();
+  const { hazards: crowdHazards, confirmerCounts, goneCounts, myVotes } = useCrowdHazards(uid);
   const [otherDrivers, setOtherDrivers] = useState<LivePresenceDoc[]>([]);
   const [reportSheetVisible, setReportSheetVisible] = useState(false);
   const [hazardBanner, setHazardBanner] = useState<{ text: string } | null>(null);
@@ -613,6 +616,18 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
     void enterPlan();
   }
 
+  const [voting, setVoting] = useState(false);
+  async function voteOnSelectedHazard(vote: "confirm" | "gone") {
+    if (!selectedHazard) return;
+    setVoting(true);
+    try {
+      // Tapping your current vote again retracts it.
+      await castHazardVote(selectedHazard, uid, myVotes[selectedHazard.id] === vote ? "none" : vote);
+    } finally {
+      setVoting(false);
+    }
+  }
+
   async function reportSelectedHazardToCity() {
     if (!selectedHazard) return;
     setFilingReport(true);
@@ -748,25 +763,61 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
                 <Badge {...classifyHazard(selectedHazard)} />
                 <IconButton icon="close" onPress={() => setSelectedHazard(null)} accessibilityLabel="Close" />
               </View>
-              <Text style={styles.hazardDetailMeta}>
-                {contributorCounts[selectedHazard.id] ?? 0} driver{(contributorCounts[selectedHazard.id] ?? 0) === 1 ? "" : "s"} reported ·{" "}
-                {Math.round(selectedHazard.confidence * 100)}% confidence
-              </Text>
-              {selectedHazard.status === "reported" ? (
-                <Text style={styles.hazardDetailMeta}>Already reported to the city.</Text>
-              ) : isEligibleForCivicReport(selectedHazard) ? (
-                <Button
-                  label="Report to city"
-                  onPress={reportSelectedHazardToCity}
-                  loading={filingReport}
-                  variant="outline"
-                  size="sm"
-                  icon="megaphone-outline"
-                  style={styles.hazardDetailBtn}
-                />
-              ) : (
-                <Text style={styles.hazardDetailMeta}>Needs more confirmations before it can be filed.</Text>
-              )}
+              {(() => {
+                const confirmers = confirmerCounts[selectedHazard.id] ?? 0;
+                const gone = goneCounts[selectedHazard.id] ?? 0;
+                const needed = confirmersNeeded(selectedHazard);
+                const myVote = myVotes[selectedHazard.id];
+                // Distance gating temporarily disabled for testing.
+                // const inRange = !!liveFix && isWithinVoteRange(selectedHazard, { lat: liveFix.lat, lng: liveFix.lng });
+                const inRange = true;
+                return (
+                  <>
+                    <Text style={styles.hazardDetailMeta}>
+                      {confirmers} driver{confirmers === 1 ? "" : "s"} confirmed ·{" "}
+                      {Math.round(selectedHazard.confidence * 100)}% confidence
+                      {gone > 0 ? ` · ${gone}/${GONE_VOTES_TO_RETIRE} say it's gone` : ""}
+                    </Text>
+                    <View style={styles.voteRow}>
+                      <Button
+                        label={myVote === "confirm" ? "Confirmed · undo" : "Still there"}
+                        onPress={() => voteOnSelectedHazard("confirm")}
+                        disabled={!inRange || voting}
+                        variant={myVote === "confirm" ? "primary" : "outline"}
+                        size="sm"
+                        icon="checkmark-circle-outline"
+                        style={styles.voteBtn}
+                      />
+                      <Button
+                        label={myVote === "gone" ? "Marked gone · undo" : "Not there / fixed"}
+                        onPress={() => voteOnSelectedHazard("gone")}
+                        disabled={!inRange || voting}
+                        variant={myVote === "gone" ? "primary" : "outline"}
+                        size="sm"
+                        icon="close-circle-outline"
+                        style={styles.voteBtn}
+                      />
+                    </View>
+                    {selectedHazard.status === "reported" ? (
+                      <Text style={styles.hazardDetailMeta}>Already reported to the city.</Text>
+                    ) : isEligibleForCivicReport(selectedHazard, confirmers) ? (
+                      <Button
+                        label="Report to city"
+                        onPress={reportSelectedHazardToCity}
+                        loading={filingReport}
+                        variant="outline"
+                        size="sm"
+                        icon="megaphone-outline"
+                        style={styles.hazardDetailBtn}
+                      />
+                    ) : (
+                      <Text style={styles.hazardDetailMeta}>
+                        {confirmers}/{needed} confirmations needed to report to the city.
+                      </Text>
+                    )}
+                  </>
+                );
+              })()}
             </Card>
           )}
         </View>
@@ -1093,5 +1144,7 @@ const styles = StyleSheet.create({
   hazardDetailHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   hazardDetailMeta: { fontFamily: fontFamily.bodyMedium, fontSize: 12, color: colors.neutral.inkSoft, marginTop: space.sm },
   hazardDetailBtn: { marginTop: space.sm },
+  voteRow: { flexDirection: "row", gap: space.sm, marginTop: space.sm },
+  voteBtn: { flex: 1 },
   stopBtnMargin: { marginHorizontal: space.lg, marginVertical: space.lg },
 });
