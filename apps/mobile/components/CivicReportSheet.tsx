@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -18,13 +17,14 @@ import * as ImagePicker from "expo-image-picker";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import type { CivicHazardKind } from "@potholeproof/civic";
 import { Button, Card } from "./ui";
+import { FullPhoto } from "./FullPhoto";
 import { colors, fontFamily, radii, space } from "../theme";
 
 /** A photo goes into the report doc itself (no Storage bucket in the pilot), so
  *  it is downscaled first: a phone photo is 12+ megapixels, far too big for a
  *  Firestore doc (1 MB limit) and far more than a city ticket needs. */
-const PHOTO_MAX_WIDTH = 1024;
-const PHOTO_JPEG_QUALITY = 0.6;
+const PHOTO_MAX_WIDTH = 1280;
+const PHOTO_JPEG_QUALITY = 0.75;
 /** Safety net after downscaling: the base64 must stay under this many chars. */
 const MAX_PHOTO_BASE64_CHARS = 700_000;
 const NOTES_MAX = 300;
@@ -153,7 +153,7 @@ export function CivicReportSheet({
             <Text style={[styles.label, styles.labelSpaced]}>Photo (optional)</Text>
             {photo ? (
               <View>
-                <Image source={{ uri: photo }} style={styles.photo} resizeMode="cover" />
+                <FullPhoto uri={photo} maxHeight={140} style={{ marginTop: space.sm }} />
                 <Pressable onPress={() => setPhoto(null)} hitSlop={8} style={styles.removePhoto}>
                   <Text style={styles.removePhotoText}>Remove photo</Text>
                 </Pressable>
@@ -213,7 +213,6 @@ const styles = StyleSheet.create({
     color: colors.neutral.ink,
     textAlignVertical: "top",
   },
-  photo: { width: "100%", height: 150, borderRadius: radii.sm, marginTop: space.sm },
   removePhoto: { alignSelf: "flex-start", marginTop: space.sm },
   removePhotoText: { fontFamily: fontFamily.bodySemibold, fontSize: 13, color: colors.status.danger },
   submitBtn: { marginTop: space.xl },
