@@ -11,7 +11,7 @@ import {
 import {
   draftCivicReport,
   hazardToOpen311Request,
-  hazardsToReport,
+  isCrowdReportable,
   normalizeOpen311Status,
 } from "@potholeproof/civic";
 import type { CivicReport, CivicReportStatus, HazardRecord } from "@potholeproof/shared-types";
@@ -32,11 +32,10 @@ const ACK_DELAY_MS = 15_000;
  *  fix-verification notification, which watches for this transition. */
 const FIX_DELAY_MS = 45_000;
 
-/** A hazard only gets the "report to city" affordance once it clears the
- *  same eligibility bar services/civic itself would use to decide a hazard
- *  is worth filing — reuses real logic instead of a UI-only threshold. */
-export function isEligibleForCivicReport(hazard: HazardRecord): boolean {
-  return hazardsToReport([hazard], []).length > 0;
+/** A hazard only gets the "report to city" affordance once enough distinct
+ *  drivers confirm it (fewer if severe) — the gate lives in services/civic. */
+export function isEligibleForCivicReport(hazard: HazardRecord, confirmerCount: number): boolean {
+  return isCrowdReportable(hazard, confirmerCount);
 }
 
 export async function fileMockCivicReport(hazard: HazardRecord, filedByUid: string): Promise<void> {

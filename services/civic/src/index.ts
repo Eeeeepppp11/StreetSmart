@@ -11,5 +11,8 @@ export {
   hazardsToReport,
   reconcileReport,
   DEFAULT_REPORTING_POLICY,
+  DEFAULT_CROWD_REPORTING_POLICY,
+  confirmersNeeded,
+  isCrowdReportable,
 } from "./reporting.js";
-export type { ReportingPolicy } from "./reporting.js";
+export type { ReportingPolicy, CrowdReportingPolicy } from "./reporting.js";

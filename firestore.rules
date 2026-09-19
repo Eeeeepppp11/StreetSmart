@@ -65,5 +65,20 @@ service cloud.firestore {
       allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
+
+    // One vote per user per hazard ("confirm" or "gone"), doc id
+    // `{hazardId}_{uid}` (apps/mobile/hazardVotes.ts). A user may change or
+    // retract ("none") their own vote; nobody else's.
+    match /hazardVotes/{voteId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.vote in ["confirm", "gone", "none"];
+      allow update: if request.auth != null
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.vote in ["confirm", "gone", "none"];
+      allow delete: if false;
+    }
   }
 }
