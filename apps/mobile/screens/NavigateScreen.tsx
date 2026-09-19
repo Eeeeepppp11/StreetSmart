@@ -52,8 +52,10 @@ import {
   nearestHazard,
   type ReportFix,
 } from "../reportFlow";
-import { fileMockCivicReport, isEligibleForCivicReport } from "../civicMock";
-import { confirmersNeeded } from "@potholeproof/civic";
+import { fileCivicReport, isEligibleForCivicReport } from "../civicMock";
+import { CIVIC_STATUS_LABEL, canFileReport, confirmersNeeded, daysNeeded } from "@potholeproof/civic";
+import { CivicReportSheet } from "../components/CivicReportSheet";
+import { addNotification, type AppNotification } from "../notifications";
 // import { isWithinVoteRange, VOTE_RADIUS_M } from "../hazardVotes"; // distance gating disabled for now
 import { castHazardVote, GONE_VOTES_TO_RETIRE } from "../hazardVotes";
 import {
@@ -122,21 +124,38 @@ function needsRoadSnapConnector(point: LatLng | null, onRoute: LatLng | undefine
 
 interface NavigateScreenProps {
   onClose: () => void;
+  /** Lets the app-level notification badge follow inbox changes made here. */
+  onNotificationsChanged?: (list: AppNotification[]) => void;
 }
 
-export default function NavigateScreen({ onClose }: NavigateScreenProps) {
+export default function NavigateScreen({ onClose, onNotificationsChanged }: NavigateScreenProps) {
   const { user } = useAuth();
   const uid = user!.uid;
   const displayName = user!.displayName;
 
   const [phase, setPhase] = useState<NavPhase>("plan");
   const fade = usePhaseFade(phase);
-  const { hazards: crowdHazards, confirmerCounts, goneCounts, myVotes, myReports, pendingIds } = useCrowdHazards(uid);
+  const {
+    hazards: crowdHazards,
+    confirmerCounts,
+    confirmerWeights,
+    evidenceDays,
+    goneCounts,
+    myVotes,
+    myReports,
+    pendingIds,
+    myCells,
+    kindByCell,
+    reportByCell,
+  } = useCrowdHazards(uid);
   const [otherDrivers, setOtherDrivers] = useState<LivePresenceDoc[]>([]);
   const [reportSheetVisible, setReportSheetVisible] = useState(false);
   const [hazardBanner, setHazardBanner] = useState<{ text: string } | null>(null);
   const [selectedHazard, setSelectedHazard] = useState<HazardRecord | null>(null);
   const [filingReport, setFilingReport] = useState(false);
+  const [civicSheetVisible, setCivicSheetVisible] = useState(false);
+  /** undefined while the street address is being looked up; null if it failed. */
+  const [civicAddress, setCivicAddress] = useState<string | null | undefined>(undefined);
   const [events, setEvents] = useState<JoltEvent[]>([]);
   const [speedMps, setSpeedMps] = useState(0);
   const [sampleHz, setSampleHz] = useState(0);
@@ -727,15 +746,75 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
     }
   }
 
-  async function reportSelectedHazardToCity() {
+  /** Open the filing sheet and look up the street address in the background. */
+  function openCivicSheet() {
+    if (!selectedHazard) return;
+    setCivicAddress(undefined);
+    setCivicSheetVisible(true);
+    reverseGeocode(selectedHazard.location)
+      .then((a) => setCivicAddress(a || null))
+      .catch(() => setCivicAddress(null));
+  }
+
+  async function submitCivicReport(notes: string, photoDataUri: string | null) {
     if (!selectedHazard) return;
     setFilingReport(true);
     try {
-      await fileMockCivicReport(selectedHazard, uid);
+      const result = await fileCivicReport({
+        hazard: selectedHazard,
+        kind: kindByCell[selectedHazard.id] ?? "pothole",
+        filedByUid: uid,
+        filedByName: displayName ?? null,
+        address: civicAddress ?? null,
+        notes,
+        photoDataUri,
+        confirmerCount: confirmerCounts[selectedHazard.id] ?? 0,
+      });
+      setCivicSheetVisible(false);
+      showToast(
+        { message: result.status === "blocked" ? result.reason : "Sent to the city — pending review" },
+        5000
+      );
+    } catch {
+      showToast({ message: "Couldn't send the report — check your connection." });
     } finally {
       setFilingReport(false);
     }
   }
+
+  /** Nudge (once per hazard) when a hazard you confirmed clears the city bar. */
+  useEffect(() => {
+    const readyKey = `pp.reportReadySeen.v1.${uid}`;
+    let cancelled = false;
+    (async () => {
+      const raw = await AsyncStorage.getItem(readyKey);
+      if (cancelled) return;
+      const seen = new Set<string>(raw ? JSON.parse(raw) : []);
+      const firstRun = raw === null;
+      let changed = false;
+      for (const h of crowdHazards) {
+        if (seen.has(h.id) || !myCells.has(h.id) || h.status !== "active") continue;
+        const evidence = { weight: confirmerWeights[h.id] ?? 0, days: evidenceDays[h.id] ?? 0 };
+        if (!isEligibleForCivicReport(h, evidence)) continue;
+        const latest = reportByCell[h.id];
+        if (!canFileReport(latest ? { status: latest.status, submittedAt: latest.submittedAt, ...(latest.closedAt ? { closedAt: latest.closedAt } : {}) } : undefined, Date.now()).ok) continue;
+        seen.add(h.id);
+        changed = true;
+        if (firstRun) continue; // don't announce everything that was already eligible
+        const list = await addNotification(uid, {
+          title: "Ready to report to the city",
+          body: "A pothole you confirmed now has enough confirmations. Open it on the map to report it.",
+        });
+        onNotificationsChanged?.(list);
+        showToast({ message: "A pothole you confirmed is ready to report to the city." }, 7000);
+      }
+      if (changed) await AsyncStorage.setItem(readyKey, JSON.stringify([...seen]));
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [crowdHazards, confirmerWeights, evidenceDays, myCells, reportByCell]);
 
   const chosen: NavRoute | undefined = routeOptions[routeChoice];
   const center = planCenter ?? PLAN_FALLBACK;
@@ -911,23 +990,47 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
                         style={styles.hazardDetailBtn}
                       />
                     )}
-                    {selectedHazard.status === "reported" ? (
-                      <Text style={styles.hazardDetailMeta}>Already reported to the city.</Text>
-                    ) : isEligibleForCivicReport(selectedHazard, confirmers) ? (
-                      <Button
-                        label="Report to city"
-                        onPress={reportSelectedHazardToCity}
-                        loading={filingReport}
-                        variant="outline"
-                        size="sm"
-                        icon="megaphone-outline"
-                        style={styles.hazardDetailBtn}
-                      />
-                    ) : (
-                      <Text style={styles.hazardDetailMeta}>
-                        {confirmers}/{needed} confirmations needed to report to the city.
-                      </Text>
-                    )}
+                    {(() => {
+                      const hz = crowdHazards.find((c) => c.id === selectedHazard.id) ?? selectedHazard;
+                      const latest = reportByCell[hz.id];
+                      if (hz.status === "reported" && latest) {
+                        return (
+                          <Text style={styles.hazardDetailMeta}>
+                            Reported to the city · {CIVIC_STATUS_LABEL[latest.status]}
+                          </Text>
+                        );
+                      }
+                      const weight = confirmerWeights[hz.id] ?? 0;
+                      const days = evidenceDays[hz.id] ?? 0;
+                      const eligible = isEligibleForCivicReport(hz, { weight, days });
+                      const refile = canFileReport(
+                        latest
+                          ? { status: latest.status, submittedAt: latest.submittedAt, ...(latest.closedAt ? { closedAt: latest.closedAt } : {}) }
+                          : undefined,
+                        Date.now()
+                      );
+                      if (eligible && refile.ok) {
+                        return (
+                          <Button
+                            label="Report to city"
+                            onPress={openCivicSheet}
+                            variant="outline"
+                            size="sm"
+                            icon="megaphone-outline"
+                            style={styles.hazardDetailBtn}
+                          />
+                        );
+                      }
+                      if (eligible) return <Text style={styles.hazardDetailMeta}>{refile.reason}</Text>;
+                      const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+                      const daysBar = daysNeeded(hz);
+                      return (
+                        <Text style={styles.hazardDetailMeta}>
+                          To report to the city: {fmt(weight)}/{needed} confirmations
+                          {daysBar > 1 ? ` · seen on ${days}/${daysBar} days` : ""}
+                        </Text>
+                      );
+                    })()}
                   </>
                 );
               })()}
@@ -947,6 +1050,16 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
             </View>
           </View>
         )}
+        <CivicReportSheet
+          visible={civicSheetVisible && !!selectedHazard}
+          kind={selectedHazard ? kindByCell[selectedHazard.id] ?? "pothole" : "pothole"}
+          address={civicAddress}
+          confirmers={selectedHazard ? confirmerCounts[selectedHazard.id] ?? 0 : 0}
+          days={selectedHazard ? evidenceDays[selectedHazard.id] ?? 0 : 0}
+          submitting={filingReport}
+          onClose={() => setCivicSheetVisible(false)}
+          onSubmit={(notes, photo) => void submitCivicReport(notes, photo)}
+        />
         <ReportSheet
           visible={reportSheetVisible}
           onClose={() => {

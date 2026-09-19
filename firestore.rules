@@ -56,13 +56,30 @@ service cloud.firestore {
       allow write: if request.auth != null && request.auth.uid == presenceUid;
     }
 
-    // Mock civic filings (apps/mobile/civicMock.ts). Only the filer's own
-    // client advances status (the scripted ack/close timers run on their
-    // session), so update is scoped to filedByUid, not any authenticated user.
+    // Civic filings (apps/mobile/civicMock.ts). One doc per hazard cell — the doc
+    // id IS the cell — so two drivers can't both file the same hazard: the second
+    // create hits an existing doc and is denied. Only the city (an admin, for now)
+    // moves a report through acknowledged / in progress / complete / rejected. The
+    // filer may (a) edit their own note/photo while the report is still open, and
+    // (b) file the hazard again once the previous report was closed or rejected.
     match /civicReports/{reportId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && request.resource.data.filedByUid == request.auth.uid;
-      allow update: if request.auth != null && resource.data.filedByUid == request.auth.uid;
+      allow create: if request.auth != null
+        && request.resource.data.filedByUid == request.auth.uid
+        && request.resource.data.status == "submitted"
+        && reportId == request.resource.data.hazardCell;
+      allow update: if isAdmin()
+        || (request.auth != null
+          && resource.data.filedByUid == request.auth.uid
+          && resource.data.status in ["submitted", "acknowledged", "in_progress"]
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["notes", "photoUrl", "description", "editedAt"]))
+        || (request.auth != null
+          && resource.data.status in ["closed", "rejected"]
+          && request.resource.data.status == "submitted"
+          && request.resource.data.filedByUid == request.auth.uid
+          && request.resource.data.hazardCell == resource.data.hazardCell);
       allow delete: if false;
     }
 
