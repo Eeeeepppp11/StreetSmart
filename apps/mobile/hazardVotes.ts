@@ -39,14 +39,5 @@ export async function castHazardVote(hazard: HazardRecord, uid: string, vote: Ha
     votedAt: new Date().toISOString(),
     createdAt: serverTimestamp(),
   });
-  if (vote === "confirm") {
-    // Contribution docs are create-only in firestore.rules, so if this user
-    // already has one (an earlier confirm, report, or drive-by) the merge-write
-    // is a denied update. The credit already exists, so that's fine to ignore.
-    try {
-      await recordHazardContribution(hazard.id, uid);
-    } catch {
-      /* already contributed */
-    }
-  }
+  if (vote === "confirm") await recordHazardContribution(hazard.id, uid);
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { JoltClassification } from "@potholeproof/shared-types";
@@ -9,6 +9,10 @@ interface ReportSheetProps {
   visible: boolean;
   onClose: () => void;
   onSubmit: (classification: JoltClassification, severity: number) => void;
+  /** Pre-fills the form when editing a report that was already filed. */
+  initial?: { classification: JoltClassification; severity: number };
+  title?: string;
+  submitLabel?: string;
 }
 
 const CLASSIFICATIONS: { value: JoltClassification; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -24,9 +28,23 @@ const SEVERITIES: { value: number; label: string }[] = [
   { value: 0.85, label: "Severe" },
 ];
 
-export function ReportSheet({ visible, onClose, onSubmit }: ReportSheetProps) {
-  const [classification, setClassification] = useState<JoltClassification>("pothole");
-  const [severity, setSeverity] = useState(0.5);
+export function ReportSheet({
+  visible,
+  onClose,
+  onSubmit,
+  initial,
+  title = "Report a hazard",
+  submitLabel = "Submit report",
+}: ReportSheetProps) {
+  const [classification, setClassification] = useState<JoltClassification>(initial?.classification ?? "pothole");
+  const [severity, setSeverity] = useState(initial?.severity ?? 0.5);
+
+  // Re-seed each time the sheet opens so an edit starts from the filed values.
+  useEffect(() => {
+    if (!visible) return;
+    setClassification(initial?.classification ?? "pothole");
+    setSeverity(initial?.severity ?? 0.5);
+  }, [visible, initial?.classification, initial?.severity]);
 
   function submit() {
     onSubmit(classification, severity);
@@ -39,7 +57,7 @@ export function ReportSheet({ visible, onClose, onSubmit }: ReportSheetProps) {
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <Card style={styles.sheet}>
           <View style={styles.headerRow}>
-            <Text style={styles.title}>Report a hazard</Text>
+            <Text style={styles.title}>{title}</Text>
             <Pressable onPress={onClose} hitSlop={8}>
               <Ionicons name="close" size={22} color={colors.neutral.inkSoft} />
             </Pressable>
@@ -75,7 +93,7 @@ export function ReportSheet({ visible, onClose, onSubmit }: ReportSheetProps) {
               );
             })}
           </View>
-          <Button label="Submit report" onPress={submit} variant="primary" size="lg" icon="checkmark" style={styles.submitBtn} />
+          <Button label={submitLabel} onPress={submit} variant="primary" size="lg" icon="checkmark" style={styles.submitBtn} />
         </Card>
       </View>
     </Modal>

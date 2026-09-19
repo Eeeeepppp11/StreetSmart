@@ -90,3 +90,25 @@ export function bearingDegrees(a: LatLng, b: LatLng): number {
     Math.sin(la1) * Math.cos(la2) * Math.cos(dLng);
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
+
+/**
+ * The point `meters` away from `from` along `bearing` (degrees clockwise from
+ * north) — the inverse of {@link distanceMeters} / {@link bearingDegrees}. Used
+ * to back-date a manual report to where the hazard actually was, behind the car.
+ */
+export function offsetLocation(from: LatLng, bearing: number, meters: number): LatLng {
+  const ang = meters / EARTH_RADIUS_M;
+  const brg = toRad(bearing);
+  const la1 = toRad(from.lat);
+  const lo1 = toRad(from.lng);
+  const la2 = Math.asin(
+    Math.sin(la1) * Math.cos(ang) + Math.cos(la1) * Math.sin(ang) * Math.cos(brg)
+  );
+  const lo2 =
+    lo1 +
+    Math.atan2(
+      Math.sin(brg) * Math.sin(ang) * Math.cos(la1),
+      Math.cos(ang) - Math.sin(la1) * Math.sin(la2)
+    );
+  return { lat: toDeg(la2), lng: ((toDeg(lo2) + 540) % 360) - 180 };
+}
