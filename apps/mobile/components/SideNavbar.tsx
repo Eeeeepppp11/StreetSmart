@@ -26,6 +26,8 @@ interface SideNavbarProps {
   onOpenAdmin: () => void;
   onOpenModelInfo: () => void;
   onOpenLeaderboard: () => void;
+  onOpenMyReports: () => void;
+  onOpenCityReview: () => void;
   onOpenNotifications: () => void;
   onLogOut: () => void;
 }
@@ -44,6 +46,8 @@ export default function SideNavbar({
   onOpenAdmin,
   onOpenModelInfo,
   onOpenLeaderboard,
+  onOpenMyReports,
+  onOpenCityReview,
   onOpenNotifications,
   onLogOut,
 }: SideNavbarProps) {
@@ -73,7 +77,13 @@ export default function SideNavbar({
     { icon: "folder-outline", label: "Saved data", onPress: onOpenLibrary },
     { icon: "hardware-chip-outline", label: "How the AI works", onPress: onOpenModelInfo },
     { icon: "trophy-outline", label: "Leaderboard", onPress: onOpenLeaderboard },
-    ...(isAdmin ? [{ icon: "stats-chart-outline" as const, label: "Admin dashboard", onPress: onOpenAdmin }] : []),
+    { icon: "document-text-outline", label: "My reports", onPress: onOpenMyReports },
+    ...(isAdmin
+      ? [
+          { icon: "stats-chart-outline" as const, label: "Admin dashboard", onPress: onOpenAdmin },
+          { icon: "business-outline" as const, label: "City review", onPress: onOpenCityReview },
+        ]
+      : []),
   ];
 
   return (

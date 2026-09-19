@@ -30,6 +30,8 @@ import { Badge, Button, Card, ConfidenceBar, EmptyState, IconButton, SeverityBad
 import { classify, colors, durations, fontFamily, radii, space, typeScale, useAppFonts, useCountUp, usePhaseFade } from "./theme";
 import SignInScreen from "./screens/SignInScreen";
 import AdminScreen from "./screens/AdminScreen";
+import MyReportsScreen from "./screens/MyReportsScreen";
+import CityReviewScreen from "./screens/CityReviewScreen";
 import LeaderboardScreen from "./screens/LeaderboardScreen";
 import NotificationsScreen from "./screens/NotificationsScreen";
 import NavigateScreen from "./screens/NavigateScreen";
@@ -44,7 +46,8 @@ import {
   upsertUserProfile,
   type CloudDrive,
 } from "./cloudDrives";
-import { subscribeToMyCivicReports } from "./civicMock";
+import { subscribeToRelevantCivicReports } from "./civicMock";
+import { NOTIFY_WITHIN_MS, civicStatusNotification, lastChangeMs } from "./civicNotifications";
 import { recordHazardContribution } from "./hazardReports";
 import { addNotification, loadNotifications, markAllNotificationsRead, type AppNotification } from "./notifications";
 
@@ -87,6 +90,8 @@ type Phase =
   | "modelInfo"
   | "compare"
   | "leaderboard"
+  | "myReports"
+  | "cityReview"
   | "notifications";
 
 /** Stable grouping key — falls back to the capture date for data saved before driveId existed. */
@@ -339,28 +344,32 @@ export default function App() {
    *  onSnapshot while the app is open and again on every cold start. */
   useEffect(() => {
     if (!user) return;
-    const seenKey = `pp.seenFixedReports.${user.uid}`;
+    const seenKey = `pp.civicStatusSeen.v1.${user.uid}`;
     let cancelled = false;
     let unsub: (() => void) | undefined;
 
-    // Wait for the seen-set to load before subscribing — otherwise the first
-    // snapshot can fire before `seen` is populated and silently drop a
-    // genuinely-new notification instead of just being skipped-and-retried.
+    // Wait for the seen-map to load before subscribing — otherwise the first
+    // snapshot can fire before it's populated and re-notify everything.
     AsyncStorage.getItem(seenKey).then((raw) => {
       if (cancelled) return;
-      const seen = new Set<string>(raw ? JSON.parse(raw) : []);
-      unsub = subscribeToMyCivicReports(user.uid, (reports) => {
-        const newlyClosed = reports.filter((r) => r.status === "closed" && !seen.has(r.id));
-        if (newlyClosed.length === 0) return;
-        for (const r of newlyClosed) seen.add(r.id);
-        void AsyncStorage.setItem(seenKey, JSON.stringify([...seen]));
-        const title = newlyClosed.length === 1 ? "Pothole fixed!" : "Potholes fixed!";
-        const body =
-          newlyClosed.length === 1
-            ? "The city confirmed a pothole you reported has been repaired."
-            : `The city confirmed ${newlyClosed.length} potholes you reported have been repaired.`;
-        Alert.alert(title, body);
-        void addNotification(user.uid, { title, body }).then(setNotifications);
+      const seen: Record<string, string> = raw ? JSON.parse(raw) : {};
+      unsub = subscribeToRelevantCivicReports(user.uid, (mine, confirmed) => {
+        let changed = false;
+        const now = Date.now();
+        for (const r of [...mine, ...confirmed]) {
+          // Keyed per filing, so a re-filed hazard notifies again from scratch.
+          const key = `${r.id}#${r.filings ?? 1}`;
+          if (seen[key] === r.status) continue;
+          seen[key] = r.status;
+          changed = true;
+          // Old changes are history, not news (also keeps a first launch quiet).
+          if (now - lastChangeMs(r) > NOTIFY_WITHIN_MS) continue;
+          const note = civicStatusNotification(r, r.filedByUid === user.uid);
+          if (!note) continue;
+          void addNotification(user.uid, note).then(setNotifications);
+          if (r.status === "closed" || r.status === "rejected") Alert.alert(note.title, note.body);
+        }
+        if (changed) void AsyncStorage.setItem(seenKey, JSON.stringify(seen));
       });
     });
 
@@ -1151,12 +1160,20 @@ export default function App() {
     return <LeaderboardScreen onClose={() => setPhase("idle")} />;
   }
 
+  if (phase === "myReports") {
+    return <MyReportsScreen uid={user.uid} onClose={() => setPhase("idle")} />;
+  }
+
+  if (phase === "cityReview") {
+    return <CityReviewScreen reviewer={user.email ?? "admin"} onClose={() => setPhase("idle")} />;
+  }
+
   if (phase === "notifications") {
     return <NotificationsScreen notifications={notifications} onClose={() => setPhase("idle")} />;
   }
 
   if (phase === "navigate") {
-    return <NavigateScreen onClose={() => setPhase("idle")} />;
+    return <NavigateScreen onClose={() => setPhase("idle")} onNotificationsChanged={setNotifications} />;
   }
 
   if (phase === "modelInfo") {
@@ -1217,6 +1234,8 @@ export default function App() {
         onOpenAdmin={() => setPhase("admin")}
         onOpenModelInfo={() => setPhase("modelInfo")}
         onOpenLeaderboard={() => setPhase("leaderboard")}
+        onOpenMyReports={() => setPhase("myReports")}
+        onOpenCityReview={() => setPhase("cityReview")}
         onOpenNotifications={() => {
           setPhase("notifications");
           void markAllNotificationsRead(uid).then(setNotifications);

@@ -24,7 +24,13 @@
       "favicon": "./assets/brand/mark.png"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "StreetSmart uses the camera so you can attach a photo of a hazard to a city report."
+        }
+      ]
     ]
   }
 }

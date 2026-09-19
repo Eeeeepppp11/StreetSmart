@@ -63,10 +63,17 @@ export function reconcileReport(
  * the ones worth escalating fastest.
  */
 export interface CrowdReportingPolicy {
-  /** Distinct confirming drivers needed for a non-severe hazard. */
+  /** Confirmer weight needed for a non-severe hazard (a normal driver counts 1). */
   minConfirmers: number;
-  /** Distinct confirming drivers needed for a severe-band hazard. */
+  /** Confirmer weight needed for a severe-band hazard. */
   minConfirmersSevere: number;
+  /** Distinct calendar days of evidence needed for a non-severe hazard — filters
+   *  a single burst from one trip. */
+  minDistinctDays: number;
+  /** Same, for a severe-band hazard. */
+  minDistinctDaysSevere: number;
+  /** A confirmer with a track record (their past reports were corroborated) counts this much. */
+  trustedWeight: number;
   /** Still refuse below this confidence (heavy "not there" votes drag it down). */
   minConfidence: number;
 }
@@ -74,6 +81,9 @@ export interface CrowdReportingPolicy {
 export const DEFAULT_CROWD_REPORTING_POLICY: CrowdReportingPolicy = {
   minConfirmers: 3,
   minConfirmersSevere: 2,
+  minDistinctDays: 2,
+  minDistinctDaysSevere: 1,
+  trustedWeight: 1.5,
   minConfidence: 0.6,
 };
 
@@ -84,15 +94,29 @@ export function confirmersNeeded(
   return hazard.severityBand === "severe" ? policy.minConfirmersSevere : policy.minConfirmers;
 }
 
-/** True when an active, un-filed hazard has enough distinct confirmers to report to the city. */
+export function daysNeeded(
+  hazard: HazardRecord,
+  policy: CrowdReportingPolicy = DEFAULT_CROWD_REPORTING_POLICY
+): number {
+  return hazard.severityBand === "severe" ? policy.minDistinctDaysSevere : policy.minDistinctDays;
+}
+
+/**
+ * True when an active, un-filed hazard has enough (weighted) confirmers, spread
+ * over enough distinct days, to report to the city. `confirmerWeight` is the
+ * sum of per-driver weights (1, or `trustedWeight` for trusted drivers);
+ * `evidenceDays` defaults to "unknown, don't gate on it".
+ */
 export function isCrowdReportable(
   hazard: HazardRecord,
-  confirmerCount: number,
+  confirmerWeight: number,
+  evidenceDays: number = Number.POSITIVE_INFINITY,
   policy: CrowdReportingPolicy = DEFAULT_CROWD_REPORTING_POLICY
 ): boolean {
   return (
     hazard.status === "active" &&
     hazard.confidence >= policy.minConfidence &&
-    confirmerCount >= confirmersNeeded(hazard, policy)
+    confirmerWeight >= confirmersNeeded(hazard, policy) &&
+    evidenceDays >= daysNeeded(hazard, policy)
   );
 }
