@@ -9,6 +9,7 @@ import {
   neighbors,
   distanceMeters,
   bearingDegrees,
+  offsetLocation,
   HAZARD_H3_RESOLUTION,
   TILE_H3_RESOLUTION,
 } from "./index.js";
@@ -63,4 +64,19 @@ test("bearingDegrees: north ≈ 0, east ≈ 90", () => {
   const east = bearingDegrees(SF, { lat: SF.lat, lng: SF.lng + 0.1 });
   assert.ok(north < 1 || north > 359, `north bearing ${north}`);
   assert.ok(Math.abs(east - 90) < 1, `east bearing ${east}`);
+});
+
+test("offsetLocation moves the requested distance along the bearing", () => {
+  const a = { lat: 37.7749, lng: -122.4194 };
+  const b = offsetLocation(a, 90, 100);
+  assert.ok(Math.abs(distanceMeters(a, b) - 100) < 0.5);
+  assert.ok(Math.abs(bearingDegrees(a, b) - 90) < 0.5);
+  const c = offsetLocation(a, 0, 50);
+  assert.ok(c.lat > a.lat && Math.abs(c.lng - a.lng) < 1e-9);
+});
+
+test("offsetLocation with zero distance is the same point", () => {
+  const a = { lat: 37.7749, lng: -122.4194 };
+  const b = offsetLocation(a, 123, 0);
+  assert.ok(distanceMeters(a, b) < 1e-6);
 });

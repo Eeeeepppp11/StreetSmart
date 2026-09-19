@@ -8,6 +8,8 @@ import { DRIVES_COLLECTION, type CloudDrive } from "./cloudDrives";
 import {
   HAZARD_CONTRIBUTIONS_COLLECTION,
   HAZARD_REPORTS_COLLECTION,
+  REPORT_WEIGHT,
+  isHazardReport,
   type HazardReportDoc,
 } from "./hazardReports";
 import { CIVIC_REPORTS_COLLECTION } from "./civicMock";
@@ -49,12 +51,22 @@ const OPEN_REPORT_STATUSES = new Set<CivicReportOverlay["status"]>([
  * (saveDriveEdits), so a Firestore snapshot isn't safely append-only — a
  * fresh engine is rebuilt from scratch on every change rather than diffed.
  */
+/** A hazard backed only by manual reports stays hidden until this many distinct
+ *  drivers stand behind it; a sensor detection is enough on its own. */
+const MIN_SOURCES_FOR_REPORT_ONLY_HAZARD = 2;
+
+interface BuiltEngine {
+  engine: HazardEngine;
+  /** Cells with at least one sensor-detected pothole. */
+  sensorCells: Set<H3Index>;
+}
+
 function buildEngine(
   drives: CloudDrive[],
   reports: HazardReportDoc[],
   civicReports: CivicReportOverlay[],
   votes: HazardVoteDoc[]
-): HazardEngine {
+): BuiltEngine {
   // nextId takes no arguments and is only called synchronously inside
   // ingestEvent, before the caller sees which cell was assigned — so this
   // ref, set immediately before each ingest call, is what gives every
@@ -66,6 +78,8 @@ function buildEngine(
     nextId: () => currentCell,
   });
 
+  const sensorCells = new Set<H3Index>();
+
   function ingest(event: JoltEvent) {
     currentCell = toHazardCell(event.location);
     engine.ingestEvent(event);
@@ -73,17 +87,27 @@ function buildEngine(
 
   for (const drive of drives) {
     for (const item of drive.items ?? []) {
-      if (item.label === "pothole") ingest(item.event);
+      if (item.label === "pothole") {
+        ingest(item.event);
+        sensorCells.add(toHazardCell(item.event.location));
+      }
     }
   }
+  // Manual reports: potholes only, weaker than a detection, and one per user
+  // per cell per day (older docs predate the deterministic id, so dedupe here too).
+  const seenReports = new Set<string>();
   for (const r of reports) {
+    if (r.retracted || !isHazardReport(r.classification, r.severity)) continue;
+    const dedupeKey = `${toHazardCell(r.location)}|${r.uid}|${r.capturedAt.slice(0, 10)}`;
+    if (seenReports.has(dedupeKey)) continue;
+    seenReports.add(dedupeKey);
     ingest({
       id: r.id,
       capturedAt: r.capturedAt,
       location: r.location,
       speedMps: 0,
       severity: r.severity,
-      confidence: 1,
+      confidence: REPORT_WEIGHT,
       classification: r.classification,
       modelVersion: "user-report",
     });
@@ -114,7 +138,7 @@ function buildEngine(
     else if (OPEN_REPORT_STATUSES.has(r.status)) engine.markReported(cell, r.id);
     // "rejected" leaves the hazard's status as whatever ingestion produced.
   }
-  return engine;
+  return { engine, sensorCells };
 }
 
 export interface CrowdHazards {
@@ -128,6 +152,10 @@ export interface CrowdHazards {
   goneCounts: Record<string, number>;
   /** The signed-in user's own vote per hazard id. */
   myVotes: Record<string, HazardVote>;
+  /** The signed-in user's own live (non-retracted) report per hazard id. */
+  myReports: Record<string, string>;
+  /** Hazards only visible to their reporter so far (report-only, one source). */
+  pendingIds: Set<string>;
 }
 
 /**
@@ -165,48 +193,78 @@ export function useCrowdHazards(uid: string): CrowdHazards {
   }, []);
 
   return useMemo(() => {
-    const hazards = buildEngine(drives, reports, civicReports, votes)
-      .all()
-      .filter((h) => h.status === "active" || h.status === "reported");
+    const { engine, sensorCells } = buildEngine(drives, reports, civicReports, votes);
+    const open = engine.all().filter((h) => h.status === "active" || h.status === "reported");
 
+    const addTo = (m: Map<string, Set<string>>, key: string, u: string) => {
+      const set = m.get(key);
+      if (set) set.add(u);
+      else m.set(key, new Set([u]));
+    };
+
+    // Everyone who ever contributed evidence to a cell (drive-bys, reports, confirms).
     const contributorsByHazard = new Map<string, Set<string>>();
-    for (const c of contributions) {
-      const set = contributorsByHazard.get(c.hazardId);
-      if (set) set.add(c.uid);
-      else contributorsByHazard.set(c.hazardId, new Set([c.uid]));
+    for (const c of contributions) addTo(contributorsByHazard, c.hazardId, c.uid);
+
+    // Who currently stands behind a cell vs. who has withdrawn.
+    const activeSupport = new Map<string, Set<string>>();
+    const withdrawn = new Map<string, Set<string>>();
+    const goneByHazard = new Map<string, Set<string>>();
+    const myVotes: Record<string, HazardVote> = {};
+    const myReports: Record<string, string> = {};
+
+    for (const r of reports) {
+      const cell = toHazardCell(r.location);
+      // A report reclassified to a non-hazard type (speed bump, other, mild rough
+      // road) is a withdrawal too — the reporter no longer says it's a pothole.
+      if (r.retracted || !isHazardReport(r.classification, r.severity)) {
+        addTo(withdrawn, cell, r.uid);
+      } else {
+        addTo(activeSupport, cell, r.uid);
+        if (r.uid === uid) myReports[cell] = r.id;
+      }
+    }
+    for (const v of votes) {
+      if (v.uid === uid && v.vote !== "none") myVotes[v.hazardId] = v.vote;
+      if (v.vote === "none") addTo(withdrawn, v.hazardId, v.uid);
+      else if (v.vote === "gone") addTo(goneByHazard, v.hazardId, v.uid);
+      else {
+        addTo(contributorsByHazard, v.hazardId, v.uid);
+        addTo(activeSupport, v.hazardId, v.uid);
+      }
+    }
+
+    const confirmerCounts: Record<string, number> = {};
+    const goneCounts: Record<string, number> = {};
+    const hazards: HazardRecord[] = [];
+    const pendingIds = new Set<string>();
+    for (const h of open) {
+      const gone = goneByHazard.get(h.id);
+      const gaveUp = withdrawn.get(h.id);
+      const stillIn = activeSupport.get(h.id);
+      let n = 0;
+      for (const u of contributorsByHazard.get(h.id) ?? []) {
+        if (gone?.has(u)) continue;
+        if (gaveUp?.has(u) && !stillIn?.has(u)) continue;
+        n += 1;
+      }
+      // Report-only hazards need a second driver before others see them; the
+      // reporter still sees their own, marked pending.
+      const confirmedEnough =
+        h.status === "reported" ||
+        sensorCells.has(h.id) ||
+        n >= MIN_SOURCES_FOR_REPORT_ONLY_HAZARD;
+      if (!confirmedEnough) {
+        if (!myReports[h.id]) continue;
+        pendingIds.add(h.id);
+      }
+      confirmerCounts[h.id] = n;
+      goneCounts[h.id] = gone?.size ?? 0;
+      hazards.push(h);
     }
     const contributorCounts: Record<string, number> = {};
     for (const h of hazards) contributorCounts[h.id] = contributorsByHazard.get(h.id)?.size ?? 0;
 
-    const goneByHazard = new Map<string, Set<string>>();
-    const retractedByHazard = new Map<string, Set<string>>();
-    const myVotes: Record<string, HazardVote> = {};
-    for (const v of votes) {
-      if (v.uid === uid && v.vote !== "none") myVotes[v.hazardId] = v.vote;
-      if (v.vote === "none") {
-        // Retracted: withdraws this user's earlier support without counting as "gone".
-        retractedByHazard.set(v.hazardId, (retractedByHazard.get(v.hazardId) ?? new Set()).add(v.uid));
-      } else if (v.vote === "gone") {
-        const set = goneByHazard.get(v.hazardId);
-        if (set) set.add(v.uid);
-        else goneByHazard.set(v.hazardId, new Set([v.uid]));
-      } else {
-        const set = contributorsByHazard.get(v.hazardId);
-        if (set) set.add(v.uid);
-        else contributorsByHazard.set(v.hazardId, new Set([v.uid]));
-      }
-    }
-    const confirmerCounts: Record<string, number> = {};
-    const goneCounts: Record<string, number> = {};
-    for (const h of hazards) {
-      const gone = goneByHazard.get(h.id);
-      goneCounts[h.id] = gone?.size ?? 0;
-      let n = 0;
-      const retracted = retractedByHazard.get(h.id);
-      for (const u of contributorsByHazard.get(h.id) ?? []) if (!gone?.has(u) && !retracted?.has(u)) n += 1;
-      confirmerCounts[h.id] = n;
-    }
-
-    return { hazards, contributorCounts, confirmerCounts, goneCounts, myVotes };
+    return { hazards, contributorCounts, confirmerCounts, goneCounts, myVotes, myReports, pendingIds };
   }, [drives, reports, civicReports, contributions, votes, uid]);
 }

@@ -32,7 +32,7 @@ import {
   type AlertSettings,
 } from "@potholeproof/alert-settings";
 import { upcomingHazards, type ProximityAlert } from "@potholeproof/proximity";
-import type { HazardRecord, JoltEvent, LatLng, SensorSample, Vec3 } from "@potholeproof/shared-types";
+import type { HazardRecord, JoltClassification, JoltEvent, LatLng, SensorSample, Vec3 } from "@potholeproof/shared-types";
 import { bearingDegrees, distanceMeters, toHazardCell } from "@potholeproof/geo";
 import { chooseRoute, type RouteScore } from "@potholeproof/routing";
 import { fetchRouteAlternatives } from "../nav/osrm";
@@ -45,7 +45,13 @@ import { ReportSheet } from "../components/ReportSheet";
 import { classify, classifyHazard, colors, fontFamily, radii, space, typeScale, usePhaseFade } from "../theme";
 import { useAuth } from "../auth/AuthContext";
 import { useCrowdHazards } from "../hazardMap";
-import { fileHazardReport, recordHazardContribution } from "../hazardReports";
+import { fileHazardReport, retractHazardReport, updateHazardReport } from "../hazardReports";
+import {
+  backdateReportLocation,
+  isFixGoodEnough,
+  nearestHazard,
+  type ReportFix,
+} from "../reportFlow";
 import { fileMockCivicReport, isEligibleForCivicReport } from "../civicMock";
 import { confirmersNeeded } from "@potholeproof/civic";
 // import { isWithinVoteRange, VOTE_RADIUS_M } from "../hazardVotes"; // distance gating disabled for now
@@ -84,6 +90,11 @@ const ALERT_MODE_OPTIONS: { value: AlertMode; label: string }[] = [
 
 type NavPhase = "plan" | "driving" | "settings";
 
+interface ReportToast {
+  message: string;
+  actions?: { label: string; onPress: () => void }[];
+}
+
 interface LiveFix {
   lat: number;
   lng: number;
@@ -120,7 +131,7 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
 
   const [phase, setPhase] = useState<NavPhase>("plan");
   const fade = usePhaseFade(phase);
-  const { hazards: crowdHazards, confirmerCounts, goneCounts, myVotes } = useCrowdHazards(uid);
+  const { hazards: crowdHazards, confirmerCounts, goneCounts, myVotes, myReports, pendingIds } = useCrowdHazards(uid);
   const [otherDrivers, setOtherDrivers] = useState<LivePresenceDoc[]>([]);
   const [reportSheetVisible, setReportSheetVisible] = useState(false);
   const [hazardBanner, setHazardBanner] = useState<{ text: string } | null>(null);
@@ -170,6 +181,16 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
   const avoidRoughRef = useRef(true);
   const crowdHazardsRef = useRef<HazardRecord[]>([]);
   const lastFixRef = useRef<LatLng | null>(null);
+  /** Latest GPS state for manual reports: position, speed, heading, accuracy. */
+  const reportFixRef = useRef<ReportFix | null>(null);
+  const [toast, setToast] = useState<ReportToast | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The just-filed report the "Add details" sheet is editing, if any. */
+  const [editingReport, setEditingReport] = useState<{
+    id: string;
+    classification: JoltClassification;
+    severity: number;
+  } | null>(null);
   const lastAlertedIdRef = useRef<string | null>(null);
   const presenceTickRef = useRef(0);
   const hazardBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -559,6 +580,12 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
           // doesn't report one (only unavailable on the very first tick).
           const headingDeg = fix.heading ?? (lastFixRef.current ? bearingDegrees(lastFixRef.current, fix.location) : null);
           lastFixRef.current = fix.location;
+          reportFixRef.current = {
+            location: fix.location,
+            speedMps: fix.speedMps,
+            heading: headingDeg,
+            accuracy: loc.coords.accuracy ?? null,
+          };
           if (headingDeg !== null) {
             const alerts = upcomingHazards(
               { position: fix.location, headingDegrees: headingDeg, speedMps: fix.speedMps },
@@ -614,6 +641,78 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
     setNavBanner(null);
     setPhase("plan");
     void enterPlan();
+  }
+
+  function showToast(next: ReportToast | null, ms = 6000) {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(next);
+    if (next) toastTimer.current = setTimeout(() => setToast(null), ms);
+  }
+
+  /** File a new manual report at `location`, then offer Add details / Undo. */
+  async function fileQuickReport(location: LatLng, classification: JoltClassification, severity: number) {
+    try {
+      const result = await fileHazardReport(uid, null, location, classification, severity);
+      if (result.status === "duplicate") {
+        showToast({ message: "You already reported this spot today." });
+        return;
+      }
+      showToast({
+        message: "Pothole reported",
+        actions: [
+          {
+            label: "Add details",
+            onPress: () => {
+              setEditingReport({ id: result.id, classification, severity });
+              setReportSheetVisible(true);
+              showToast(null);
+            },
+          },
+          {
+            label: "Undo",
+            onPress: () => {
+              void retractHazardReport(result.id);
+              showToast({ message: "Report removed" }, 3000);
+            },
+          },
+        ],
+      });
+    } catch {
+      showToast({ message: "Couldn't send the report — check your connection." });
+    }
+  }
+
+  /** One tap: a moderate pothole at the back-dated location. If a known hazard
+   *  is already right there, ask whether this is it and confirm instead. */
+  function quickReport() {
+    const fix = reportFixRef.current;
+    if (!fix) return;
+    if (!isFixGoodEnough(fix)) {
+      showToast({ message: "GPS signal is weak — try again in a moment." });
+      return;
+    }
+    const location = backdateReportLocation(fix);
+    const nearby = nearestHazard(crowdHazards, location);
+    if (nearby && myVotes[nearby.id] !== "confirm") {
+      showToast(
+        {
+          message: "Is this the pothole ahead?",
+          actions: [
+            {
+              label: "Yes, confirm it",
+              onPress: () => {
+                void castHazardVote(nearby, uid, "confirm");
+                showToast({ message: "Confirmed — thanks" }, 3000);
+              },
+            },
+            { label: "No, new one", onPress: () => void fileQuickReport(location, "pothole", 0.5) },
+          ],
+        },
+        9000
+      );
+      return;
+    }
+    void fileQuickReport(location, "pothole", 0.5);
   }
 
   const [voting, setVoting] = useState(false);
@@ -754,7 +853,7 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
           )}
           {liveFix && (
             <View style={styles.reportWrap}>
-              <IconButton icon="add-circle" variant="floating" onPress={() => setReportSheetVisible(true)} accessibilityLabel="Report hazard" />
+              <IconButton icon="add-circle" variant="floating" onPress={quickReport} accessibilityLabel="Report pothole" />
             </View>
           )}
           {selectedHazard && (
@@ -776,6 +875,7 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
                     <Text style={styles.hazardDetailMeta}>
                       {confirmers} driver{confirmers === 1 ? "" : "s"} confirmed ·{" "}
                       {Math.round(selectedHazard.confidence * 100)}% confidence
+                      {pendingIds.has(selectedHazard.id) ? " · pending, needs one more driver" : ""}
                       {gone > 0 ? ` · ${gone}/${GONE_VOTES_TO_RETIRE} say it's gone` : ""}
                     </Text>
                     <View style={styles.voteRow}>
@@ -798,6 +898,19 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
                         style={styles.voteBtn}
                       />
                     </View>
+                    {myReports[selectedHazard.id] && (
+                      <Button
+                        label="Retract my report"
+                        onPress={() => {
+                          void retractHazardReport(myReports[selectedHazard.id]!);
+                          setSelectedHazard(null);
+                        }}
+                        variant="outline"
+                        size="sm"
+                        icon="arrow-undo-outline"
+                        style={styles.hazardDetailBtn}
+                      />
+                    )}
                     {selectedHazard.status === "reported" ? (
                       <Text style={styles.hazardDetailMeta}>Already reported to the city.</Text>
                     ) : isEligibleForCivicReport(selectedHazard, confirmers) ? (
@@ -822,15 +935,31 @@ export default function NavigateScreen({ onClose }: NavigateScreenProps) {
           )}
         </View>
         <Button label="End navigation" onPress={stopDrive} variant="danger" size="lg" icon="close-circle-outline" style={styles.stopBtnMargin} />
+        {toast && (
+          <View style={styles.toast}>
+            <Text style={styles.toastText}>{toast.message}</Text>
+            <View style={styles.toastActions}>
+              {toast.actions?.map((a) => (
+                <Pressable key={a.label} onPress={a.onPress} hitSlop={8}>
+                  <Text style={styles.toastAction}>{a.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
         <ReportSheet
           visible={reportSheetVisible}
-          onClose={() => setReportSheetVisible(false)}
+          onClose={() => {
+            setReportSheetVisible(false);
+            setEditingReport(null);
+          }}
+          title="Add details"
+          submitLabel="Save"
+          initial={editingReport ?? undefined}
           onSubmit={(classification, severity) => {
-            if (!liveFix) return;
-            const location = { lat: liveFix.lat, lng: liveFix.lng };
-            const hazardId = toHazardCell(location);
-            void fileHazardReport(uid, null, location, classification, severity);
-            void recordHazardContribution(hazardId, uid);
+            if (!editingReport) return;
+            void updateHazardReport(editingReport.id, { classification, severity });
+            showToast({ message: "Report updated" }, 3000);
           }}
         />
       </Animated.View>
@@ -1144,6 +1273,18 @@ const styles = StyleSheet.create({
   hazardDetailHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   hazardDetailMeta: { fontFamily: fontFamily.bodyMedium, fontSize: 12, color: colors.neutral.inkSoft, marginTop: space.sm },
   hazardDetailBtn: { marginTop: space.sm },
+  toast: {
+    position: "absolute",
+    left: space.lg,
+    right: space.lg,
+    bottom: 96,
+    padding: space.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.neutral.ink,
+  },
+  toastText: { fontFamily: fontFamily.bodySemibold, fontSize: 14, color: colors.white },
+  toastActions: { flexDirection: "row", gap: space.lg, marginTop: space.sm },
+  toastAction: { fontFamily: fontFamily.bodyBold, fontSize: 14, color: colors.brand.primary },
   voteRow: { flexDirection: "row", gap: space.sm, marginTop: space.sm },
   voteBtn: { flex: 1 },
   stopBtnMargin: { marginHorizontal: space.lg, marginVertical: space.lg },
