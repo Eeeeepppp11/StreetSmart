@@ -164,7 +164,7 @@ export default function SideNavbar({
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(16,19,23,0.5)",
   },
   drawer: {

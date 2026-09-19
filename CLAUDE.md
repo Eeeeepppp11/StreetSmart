@@ -72,7 +72,7 @@ node --test --test-name-pattern="mount" packages/detector/dist/features.test.js
 App-specific:
 
 ```bash
-# mobile (Expo SDK 54 — pinned; read apps/mobile/AGENTS.md first)
+# mobile (Expo SDK 57 — pinned; read apps/mobile/AGENTS.md first)
 pnpm --filter @potholeproof/mobile typecheck
 cd apps/mobile && pnpm exec expo start             # QR into Expo Go
 
@@ -162,7 +162,7 @@ there first:
 |---|---|
 | Maps / routing (MVP) | Mapbox (`@rnmapbox/maps` + Directions); Valhalla later |
 | Backend language | NestJS + TypeScript (shares `shared-types`); Python only in `ml/` |
-| Mobile base | Bare RN + TS is the production target; the current **pilot runs in Expo Go (SDK 54, pinned)** |
+| Mobile base | Bare RN + TS is the production target; the current **pilot runs in Expo Go (SDK 57, pinned)** |
 | Pilot civic market | San Francisco (SF311, Open311) |
 | Phase-1 backend | Minimal opt-in collect-only endpoint; client stays fully offline-capable |
 
@@ -181,6 +181,6 @@ there first:
   yet. The app runs this model via a pure-JS forward pass
   (`packages/detector/src/model.ts`), not native TFLite — `react-native-fast-tflite`
   can't run in Expo Go.
-- **Expo SDK 54 is pinned deliberately** (the pilot phone's Expo Go). Never
+- **Expo SDK 57 is pinned deliberately** (the pilot phone's Expo Go). Never
   hand-bump Expo/RN versions; use `expo install --fix`. See
   `apps/mobile/AGENTS.md`.
