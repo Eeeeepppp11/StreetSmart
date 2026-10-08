@@ -112,8 +112,12 @@ function VerdictRow({
       <View style={styles.verdictLabelWrap}>
         <Badge label={label} icon={icon} tone="neutral" />
       </View>
-      <Text style={styles.verdictClass}>{LABEL_DISPLAY[result.classification] ?? result.classification}</Text>
-      <ConfidenceBar pct={result.confidence} color={color} animated={false} />
+      <Text style={styles.verdictClass} numberOfLines={1}>
+        {LABEL_DISPLAY[result.classification] ?? result.classification}
+      </Text>
+      <View style={styles.verdictBar}>
+        <ConfidenceBar pct={result.confidence} color={color} animated={false} />
+      </View>
       <Text style={styles.verdictPct}>{pct}%</Text>
     </View>
   );
@@ -206,9 +210,10 @@ const styles = StyleSheet.create({
   cardHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: space.sm },
   cardIndex: { fontFamily: fontFamily.bodySemibold, fontSize: 12, color: colors.neutral.inkFaint },
   verdictRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.sm },
-  verdictLabelWrap: { width: 96 },
-  verdictClass: { fontFamily: fontFamily.bodyBold, fontSize: 13, color: colors.neutral.ink, width: 78 },
-  verdictPct: { fontFamily: fontFamily.monoMedium, fontSize: 12, color: colors.neutral.inkSoft, width: 34, textAlign: "right" },
+  verdictLabelWrap: { width: 96, flexShrink: 0 },
+  verdictClass: { fontFamily: fontFamily.bodyBold, fontSize: 13, color: colors.neutral.ink, width: 78, flexShrink: 0 },
+  verdictBar: { flex: 1, minWidth: 24 },
+  verdictPct: { fontFamily: fontFamily.monoMedium, fontSize: 12, color: colors.neutral.inkSoft, width: 38, flexShrink: 0, textAlign: "right" },
   featureGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: space.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.neutral.bg, paddingTop: space.sm },
   featureCell: { width: "33.33%", marginBottom: 6 },
   featureValue: { fontFamily: fontFamily.monoMedium, fontSize: 13, color: colors.neutral.ink },
