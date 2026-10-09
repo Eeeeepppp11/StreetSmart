@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as Location from "expo-location";
-import MapView, { Marker, type Region } from "react-native-maps";
+import { AppMapView, AppMarker, AppPolyline, type AppMapHandle, type AppRegion } from "../components/AppMap";
 import { collection, onSnapshot } from "firebase/firestore";
 import type { JoltEvent } from "@potholeproof/shared-types";
 import { db } from "../firebase";
@@ -29,7 +29,7 @@ interface AdminScreenProps {
   onClose: () => void;
 }
 
-const FALLBACK_REGION: Region = {
+const FALLBACK_REGION: AppRegion = {
   latitude: 37.7749,
   longitude: -122.4194,
   latitudeDelta: 0.3,
@@ -41,7 +41,7 @@ export default function AdminScreen({ onClose }: AdminScreenProps) {
   const [loaded, setLoaded] = useState(false);
   const [userEmails, setUserEmails] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<MapEvent | null>(null);
-  const [initialRegion, setInitialRegion] = useState<Region | null>(null);
+  const [initialRegion, setInitialRegion] = useState<AppRegion | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -157,16 +157,16 @@ export default function AdminScreen({ onClose }: AdminScreenProps) {
 
       <View style={styles.mapWrap}>
         {initialRegion ? (
-          <MapView style={styles.map} initialRegion={initialRegion} showsUserLocation>
+          <AppMapView style={styles.map} initialRegion={initialRegion} showsUserLocation>
             {points.map((p) => (
-              <Marker
+              <AppMarker
                 key={p.key}
                 coordinate={{ latitude: p.event.location.lat, longitude: p.event.location.lng }}
                 pinColor={classify(p.event).color}
                 onPress={() => setSelected(p)}
               />
             ))}
-          </MapView>
+          </AppMapView>
         ) : (
           <View style={styles.mapLoading}>
             <ActivityIndicator color={colors.brand.primary} />
