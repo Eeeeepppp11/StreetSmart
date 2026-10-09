@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import MapView, { Marker, Polyline } from "react-native-maps";
+import { AppMapView, AppMarker, AppPolyline, type AppMapHandle } from "../components/AppMap";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { Accelerometer, Gyroscope } from "expo-sensors";
@@ -185,8 +185,8 @@ export default function NavigateScreen({ onClose, onNotificationsChanged }: Navi
   const pipeline = useRef<DetectionPipeline | null>(null);
   const bundler = useRef<AlertBundler | null>(null);
   const alertSettingsRef = useRef<AlertSettings>(DEFAULT_ALERT_SETTINGS);
-  const liveMap = useRef<MapView | null>(null);
-  const planMap = useRef<MapView | null>(null);
+  const liveMap = useRef<AppMapHandle | null>(null);
+  const planMap = useRef<AppMapHandle | null>(null);
   const programmaticRegionChange = useRef(false);
   const buffer = useRef<SensorSample[]>([]);
   const lastGyro = useRef<Vec3>({ x: 0, y: 0, z: 0 });
@@ -850,8 +850,8 @@ export default function NavigateScreen({ onClose, onNotificationsChanged }: Navi
         )}
         <View style={styles.liveMapWrap}>
           {liveFix ? (
-            <MapView
-              ref={liveMap}
+            <AppMapView
+              ref={liveMap}
               style={styles.liveMap}
               initialRegion={{
                 latitude: liveFix.lat,
@@ -867,18 +867,18 @@ export default function NavigateScreen({ onClose, onNotificationsChanged }: Navi
               onPanDrag={handleDrivePanDrag}
               onRegionChangeComplete={handleDriveRegionChangeComplete}
             >
-              <Marker coordinate={{ latitude: liveFix.lat, longitude: liveFix.lng }} anchor={{ x: 0.5, y: 0.5 }} flat>
+              <AppMarker coordinate={{ latitude: liveFix.lat, longitude: liveFix.lng }} anchor={{ x: 0.5, y: 0.5 }} flat>
                 <View style={styles.carDot} />
-              </Marker>
+              </AppMarker>
               {navPath && navPath.length > 1 && (
                 <Fragment>
-                  <Polyline
+                  <AppPolyline
                     coordinates={navPath.map((p) => ({ latitude: p.lat, longitude: p.lng }))}
                     strokeColor={colors.status.info}
                     strokeWidth={5}
                   />
                   {needsRoadSnapConnector(liveFix, navPath[0]) && (
-                    <Polyline
+                    <AppPolyline
                       coordinates={[
                         { latitude: liveFix.lat, longitude: liveFix.lng },
                         { latitude: navPath[0]!.lat, longitude: navPath[0]!.lng },
@@ -891,13 +891,13 @@ export default function NavigateScreen({ onClose, onNotificationsChanged }: Navi
                 </Fragment>
               )}
               {navPath && dest && (
-                <Marker coordinate={{ latitude: dest.lat, longitude: dest.lng }} pinColor={colors.status.success} title="Destination" />
+                <AppMarker coordinate={{ latitude: dest.lat, longitude: dest.lng }} pinColor={colors.status.success} title="Destination" />
               )}
               {events.map((e) => (
-                <Marker key={e.id} coordinate={{ latitude: e.location.lat, longitude: e.location.lng }} pinColor={classify(e).color} />
+                <AppMarker key={e.id} coordinate={{ latitude: e.location.lat, longitude: e.location.lng }} pinColor={classify(e).color} />
               ))}
               {crowdHazards.map((h) => (
-                <Marker
+                <AppMarker
                   key={h.id}
                   coordinate={{ latitude: h.location.lat, longitude: h.location.lng }}
                   pinColor={classifyHazard(h).color}
@@ -908,7 +908,7 @@ export default function NavigateScreen({ onClose, onNotificationsChanged }: Navi
               {otherDrivers
                 .filter((d) => d.uid !== uid && !isPresenceStale(d))
                 .map((d) => (
-                  <Marker
+                  <AppMarker
                     key={d.uid}
                     coordinate={{ latitude: d.location.lat, longitude: d.location.lng }}
                     anchor={{ x: 0.5, y: 0.5 }}
@@ -916,9 +916,9 @@ export default function NavigateScreen({ onClose, onNotificationsChanged }: Navi
                     rotation={d.headingDegrees ?? 0}
                   >
                     <View style={styles.otherDriverDot} />
-                  </Marker>
+                  </AppMarker>
                 ))}
-            </MapView>
+            </AppMapView>
           ) : (
             <View style={styles.liveMapWaiting}>
               <ActivityIndicator size="small" color={colors.neutral.inkFaint} />
@@ -1183,8 +1183,8 @@ export default function NavigateScreen({ onClose, onNotificationsChanged }: Navi
       {geocodeError && <Text style={styles.planError}>{geocodeError}</Text>}
 
       <View style={styles.planMapWrap}>
-        <MapView
-          ref={planMap}
+        <AppMapView
+          ref={planMap}
           style={{ flex: 1 }}
           initialRegion={{ latitude: center.lat, longitude: center.lng, latitudeDelta: PLAN_MAP_DELTA, longitudeDelta: PLAN_MAP_DELTA }}
           showsUserLocation
@@ -1199,7 +1199,7 @@ export default function NavigateScreen({ onClose, onNotificationsChanged }: Navi
             const end = r.path[r.path.length - 1];
             return (
               <Fragment key={`route-${i}`}>
-                <Polyline
+                <AppPolyline
                   coordinates={r.path.map((p) => ({ latitude: p.lat, longitude: p.lng }))}
                   strokeColor={routeColor}
                   strokeWidth={i === routeChoice ? 5 : 3}
@@ -1207,7 +1207,7 @@ export default function NavigateScreen({ onClose, onNotificationsChanged }: Navi
                   onPress={() => setRouteChoice(i)}
                 />
                 {needsRoadSnapConnector(origin, start) && (
-                  <Polyline
+                  <AppPolyline
                     coordinates={[
                       { latitude: origin!.lat, longitude: origin!.lng },
                       { latitude: start!.lat, longitude: start!.lng },
@@ -1218,7 +1218,7 @@ export default function NavigateScreen({ onClose, onNotificationsChanged }: Navi
                   />
                 )}
                 {needsRoadSnapConnector(dest, end) && (
-                  <Polyline
+                  <AppPolyline
                     coordinates={[
                       { latitude: end!.lat, longitude: end!.lng },
                       { latitude: dest!.lat, longitude: dest!.lng },
@@ -1231,10 +1231,10 @@ export default function NavigateScreen({ onClose, onNotificationsChanged }: Navi
               </Fragment>
             );
           })}
-          {origin && <Marker coordinate={{ latitude: origin.lat, longitude: origin.lng }} pinColor={colors.status.info} title="Start" />}
-          {dest && <Marker coordinate={{ latitude: dest.lat, longitude: dest.lng }} pinColor={colors.status.success} title="Destination" />}
+          {origin && <AppMarker coordinate={{ latitude: origin.lat, longitude: origin.lng }} pinColor={colors.status.info} title="Start" />}
+          {dest && <AppMarker coordinate={{ latitude: dest.lat, longitude: dest.lng }} pinColor={colors.status.success} title="Destination" />}
           {crowdHazards.map((h) => (
-            <Marker
+            <AppMarker
               key={h.id}
               coordinate={{ latitude: h.location.lat, longitude: h.location.lng }}
               pinColor={classifyHazard(h).color}
@@ -1242,7 +1242,7 @@ export default function NavigateScreen({ onClose, onNotificationsChanged }: Navi
               title={classifyHazard(h).label}
             />
           ))}
-        </MapView>
+        </AppMapView>
       </View>
       {routeBusy && (
         <View style={styles.planStatusRow}>

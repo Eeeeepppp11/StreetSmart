@@ -16,7 +16,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import MapView, { Marker, Polyline } from "react-native-maps";
+import { AppMapView, AppMarker, AppPolyline, type AppMapHandle } from "./components/AppMap";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { Accelerometer, Gyroscope } from "expo-sensors";
@@ -274,7 +274,7 @@ function ConfirmOverlay({ event, onConfirm }: { event: JoltEvent; onConfirm: () 
 }
 
 export default function App() {
-  const [fontsLoaded] = useAppFonts();
+  const [fontsLoaded, fontError] = useAppFonts();
   const { user, initializing, logOut } = useAuth();
   const [navOpen, setNavOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -379,7 +379,8 @@ export default function App() {
     };
   }, [user]);
 
-  if (!fontsLoaded || initializing) {
+  // A font load error falls back to system fonts instead of spinning forever.
+  if ((!fontsLoaded && !fontError) || initializing) {
     return (
       <View style={[styles.screen, styles.centerFill]}>
         <StatusBar style="dark" />
@@ -967,10 +968,10 @@ export default function App() {
               : " · confirm each one to build training data"}
         </Text>
         {region && (
-          <MapView style={styles.map} initialRegion={region}>
+          <AppMapView style={styles.map} initialRegion={region}>
             {routePoints.length > 1 && (
               <>
-                <Polyline
+                <AppPolyline
                   coordinates={routePoints.map((p) => ({
                     latitude: p.lat,
                     longitude: p.lng,
@@ -978,7 +979,7 @@ export default function App() {
                   strokeColor={colors.status.info}
                   strokeWidth={4}
                 />
-                <Marker
+                <AppMarker
                   coordinate={{
                     latitude: routePoints[0]!.lat,
                     longitude: routePoints[0]!.lng,
@@ -986,7 +987,7 @@ export default function App() {
                   pinColor={colors.status.success}
                   title="Start"
                 />
-                <Marker
+                <AppMarker
                   coordinate={{
                     latitude: routePoints[routePoints.length - 1]!.lat,
                     longitude: routePoints[routePoints.length - 1]!.lng,
@@ -997,7 +998,7 @@ export default function App() {
               </>
             )}
             {events.map((e) => (
-              <Marker
+              <AppMarker
                 key={e.id}
                 coordinate={{ latitude: e.location.lat, longitude: e.location.lng }}
                 pinColor={classify(e).color}
@@ -1005,7 +1006,7 @@ export default function App() {
                 description={`severity ${Math.round(e.severity * 100)}% · confidence ${Math.round(e.confidence * 100)}%`}
               />
             ))}
-          </MapView>
+          </AppMapView>
         )}
         <FlatList
           style={{ flex: 1, alignSelf: "stretch" }}
