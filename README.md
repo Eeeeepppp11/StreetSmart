@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="docs/cover-photo.jpg" alt="StreetSmart" width="100%" />
+  <img src="apps/mobile/assets/brand/logo-horizontal.png" alt="StreetSmart: Detect. Report. Drive Safer." width="380" />
 </p>
-
-<h1 align="center">StreetSmart</h1>
 
 <p align="center">
   <strong>Every commute is a road survey.</strong><br />
