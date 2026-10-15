@@ -6,7 +6,7 @@ import { DEFAULT_CONFIG } from "./config.js";
 
 /**
  * A recorded drive — the fixture format for the sensor-replay harness. Golden
- * drives (real or synthetic) replay deterministically so detector changes are
+ * drives (real or demo) replay deterministically so detector changes are
  * regression-tested without re-driving. The Python `ml/` platform consumes the
  * same shape for model training/eval.
  */

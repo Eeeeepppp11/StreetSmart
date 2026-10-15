@@ -51,7 +51,7 @@ function labSpeedAt(tMs: number): number {
   return Math.max(0.5, speedAtKeyframes(tMs, LAB_SPEED_KEYFRAMES) + wobble);
 }
 
-/** A ~48s synthetic drive through Bellevue, WA 98005, with deliberately
+/** A ~48s demo drive through Bellevue, WA 98005, with deliberately
  *  varied/borderline hits across a broad speed range, so the heuristic and
  *  the trained model are likely to actually disagree somewhere — that's the
  *  interesting case this lab exists to surface. */
@@ -177,7 +177,7 @@ export default function CompareScreen({ onClose }: CompareScreenProps) {
         <ScreenHeader title="Heuristic vs AI Lab" onBack={onClose} />
       </View>
       <Text style={styles.subtitle}>
-        The same synthetic drive, scored two ways: the hand-tuned rule thresholds vs. the trained
+        The same demo drive, scored two ways: the hand-tuned rule thresholds vs. the trained
         model — same inputs, independent verdicts.
       </Text>
 

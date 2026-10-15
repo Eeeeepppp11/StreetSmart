@@ -47,8 +47,8 @@ export interface DetectorConfig {
 }
 
 /**
- * Starting thresholds, tuned against the synthetic signal generator in
- * `synth.ts`. Re-tune against real labelled pilot drives.
+ * Starting thresholds, tuned against the demo signal generator in
+ * `demo.ts`. Re-tune against real labelled pilot drives.
  */
 export const DEFAULT_CONFIG: DetectorConfig = {
   triggerAccel: 3.0,

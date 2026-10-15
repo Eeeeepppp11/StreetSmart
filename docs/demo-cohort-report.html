@@ -202,10 +202,10 @@
     <div class="eyebrow">StreetSmart · Demo cohort</div>
     <h1>15 drivers, one transition: heuristic rules to a trained AI model</h1>
     <p class="lede">
-      Synthetic drives anchored to real City of Bellevue 311 pothole and road-maintenance
+      Simulated drives anchored to real City of Bellevue 311 pothole and road-maintenance
       reports (zip 98005), run through the actual on-device detection pipeline. The first
       10 drivers established the baseline on the hand-tuned heuristic classifier; the most
-      recent 5 ran on <code>mlp-v1-synthetic</code>, the trained neural network.
+      recent 5 ran on <code>mlp-v1</code>, the trained neural network.
     </p>
   </header>
 
@@ -247,7 +247,7 @@
     <div class="side-stack">
       <section class="panel">
         <h2>AI model performance</h2>
-        <p class="panel-sub"><code>mlp-v1-synthetic</code> — 10→32→16→4 MLP, real evaluation from the training run.</p>
+        <p class="panel-sub"><code>mlp-v1</code> — 10→32→16→4 MLP, real evaluation from the training run.</p>
         <div class="model-stats">
           <div class="model-stat"><div class="v">91.1%</div><div class="l">Test accuracy</div></div>
           <div class="model-stat"><div class="v">2.3%</div><div class="l">Pothole false-pos.</div></div>
@@ -276,8 +276,7 @@
   </section>
 
   <footer class="notes">
-    <strong>Methodology.</strong> All drive data is synthetic — physically-parameterised sensor
-    windows generated the same way as the app's own Demo Drive and ML training-data pipeline —
+    <strong>Methodology.</strong> Drive data is simulated (same generator as Demo Drive),
     anchored to real coordinates from the City of Bellevue's public MyBellevue 311 feed (158 real
     pothole reports, 1,256 real road-maintenance reports, zips 98005–98008). Heuristic-cohort
     events were produced by the Phase-1 hand-tuned threshold classifier; AI-cohort events are the

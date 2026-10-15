@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeSamples } from "./synth.js";
+import { makeSamples } from "./demo.js";
 import { extractFeatures } from "./features.js";
 import { classifyWithModel, runModel } from "./model.js";
 

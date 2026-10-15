@@ -11,7 +11,7 @@ import tensorflow as tf
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(HERE, "..", "training", "artifacts", "pothole_model.keras")
-DATA_PATH = os.path.join(HERE, "..", "data", "synthetic_dataset.json")
+DATA_PATH = os.path.join(HERE, "..", "data", "training_dataset.json")
 METRICS_PATH = os.path.join(HERE, "..", "training", "artifacts", "metrics.json")
 OUT_PATH = os.path.join(HERE, "artifacts", "parity_check.json")
 

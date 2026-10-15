@@ -76,7 +76,7 @@ import {
 const G = 9.81;
 const SENSOR_INTERVAL_MS = 20;
 const DRAIN_INTERVAL_MS = 300;
-const MODEL_VERSION = "mlp-v1-synthetic";
+const MODEL_VERSION = "mlp-v1";
 const ALERT_SETTINGS_KEY = "pp.nav.alertSettings.v1";
 
 const SENSITIVITY_OPTIONS: { value: AlertSensitivity; label: string }[] = [
@@ -851,7 +851,7 @@ export default function NavigateScreen({ onClose, onNotificationsChanged }: Navi
         <View style={styles.liveMapWrap}>
           {liveFix ? (
             <AppMapView
-              ref={liveMap}
+              ref={liveMap}
               style={styles.liveMap}
               initialRegion={{
                 latitude: liveFix.lat,
@@ -1184,7 +1184,7 @@ export default function NavigateScreen({ onClose, onNotificationsChanged }: Navi
 
       <View style={styles.planMapWrap}>
         <AppMapView
-          ref={planMap}
+          ref={planMap}
           style={{ flex: 1 }}
           initialRegion={{ latitude: center.lat, longitude: center.lng, latitudeDelta: PLAN_MAP_DELTA, longitudeDelta: PLAN_MAP_DELTA }}
           showsUserLocation

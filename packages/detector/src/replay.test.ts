@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { LatLng } from "@potholeproof/shared-types";
-import { makeSamples } from "./synth.js";
+import { makeSamples } from "./demo.js";
 import { replayDrive, type RecordedDrive } from "./replay.js";
 import type { GpsFix, PipelineDeps } from "./detect.js";
 

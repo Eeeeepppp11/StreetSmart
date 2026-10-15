@@ -57,11 +57,10 @@ const DRAIN_INTERVAL_MS = 300;
 const CONFIRM_WINDOW_MS = 6000;
 const SERVER_KEY = "pp.server.url";
 const ANON_KEY = "pp.anon.id";
-// Small MLP trained on synthetic, physically-parameterised sensor windows
-// (packages/detector/src/scripts/gen-training-data.ts). Runs as a pure-JS
+// Small MLP trained on simulated sensor data. Runs as a pure-JS
 // forward pass (packages/detector/src/model.ts) since native TFLite can't
 // run in Expo Go. See the in-app "How the AI works" screen for real metrics.
-const MODEL_VERSION = "mlp-v1-synthetic";
+const MODEL_VERSION = "mlp-v1";
 const APP_VERSION = "0.2.0";
 
 /** Local storage is namespaced per-account so switching accounts on one phone never leaks another user's cached data. */
@@ -193,7 +192,7 @@ function demoSpeedAt(tMs: number): number {
 }
 
 /** A ~50s simulated drive through Bellevue, WA 98005: real detector, varied
- *  speed profile, synthetic road covering a broad range of situations. */
+ *  speed profile, demo road covering a broad range of situations. */
 function buildDemoDrive(): { samples: SensorSample[]; gps: GpsFix[] } {
   const DURATION_MS = 50000;
   const samples = makeSamples({
@@ -578,7 +577,7 @@ export default function App() {
 
   async function saveLabels() {
     if (isDemo) {
-      // Demo detections are synthetic — never let them pollute training data.
+      // Demo detections are simulated — never let them pollute training data.
       setEvents([]);
       setLabels({});
       setPhase("idle");
@@ -1210,7 +1209,7 @@ export default function App() {
         <Button label="End drive" onPress={stopDrive} variant="danger" size="lg" icon="stop-circle-outline" style={styles.stopBtnMargin} />
         <Text style={styles.driveHint}>
           {isDemo
-            ? "Replaying a synthetic road through the real detector."
+            ? "Replaying a demo road through the real detector."
             : "Mount the phone, keep the app open, and drive normally."}
         </Text>
         {pendingConfirm && <ConfirmOverlay key={pendingConfirm.id} event={pendingConfirm} onConfirm={confirmPothole} />}

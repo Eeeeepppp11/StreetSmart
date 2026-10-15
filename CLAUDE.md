@@ -131,8 +131,8 @@ envelopes). Change a wire shape there, not in a consumer.
   heuristic `classify` and the trained `classifyWithModel` (`model.ts`) both
   emit the same `DetectionResult` shape and are swapped via the optional
   `PipelineDeps.classify` — the app currently passes `classifyWithModel`
-  (`mlp-v1-synthetic`, see `ml/README.md`). `makeSamples` (`synth.ts`)
-  generates synthetic drives — used by tests, the app's **Demo Drive mode**
+  (`mlp-v1`, see `ml/README.md`). `makeSamples` (`demo.ts`)
+  generates demo drives — used by tests, the app's **Demo Drive mode**
   (`docs/DEMO.md`), and `scripts/gen-training-data.ts`'s training-data
   generation; demo events must never be saved as training data.
 - **`services/hazard-engine`** — "confidence, not truth": per-H3-cell
@@ -175,10 +175,9 @@ there first:
   TurboModule (background, 100 Hz) that `docs/ARCHITECTURE.md` targets.
 - `infra/` is documentation/scaffold only — needs external services not
   available in this repo. `ml/` now has a working training/export pipeline
-  (see `ml/README.md`), but its only model (`mlp-v1-synthetic`) is trained on
-  synthetic, physically-parameterised sensor windows, not real recorded
-  drives — `ml/replay/` (the real-drive regression harness) doesn't exist
-  yet. The app runs this model via a pure-JS forward pass
+  (see `ml/README.md`), but its only model (`mlp-v1`) is trained on
+  simulated sensor data — `ml/replay/` (the real-drive regression harness)
+  doesn't exist yet. The app runs this model via a pure-JS forward pass
   (`packages/detector/src/model.ts`), not native TFLite — `react-native-fast-tflite`
   can't run in Expo Go.
 - **Expo SDK 57 is pinned deliberately** (the pilot phone's Expo Go). Never

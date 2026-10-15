@@ -24,7 +24,7 @@ export interface ClassifierComparison {
 }
 
 /**
- * Scans a recorded (or synthetic) drive exactly like {@link runDetection}'s
+ * Scans a recorded (or demo) drive exactly like {@link runDetection}'s
  * peak-finding pass, but instead of emitting one classifier's verdict as a
  * JoltEvent, runs the heuristic and the trained model against the same
  * extracted features and returns both.

@@ -22,7 +22,7 @@ export function clamp01(x: number): number {
 }
 
 /**
- * Deterministic linear-congruential PRNG in [0, 1). Seeded so synthetic drives
+ * Deterministic linear-congruential PRNG in [0, 1). Seeded so demo drives
  * and tests are perfectly reproducible.
  */
 export function lcg(seed: number): () => number {

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeSamples } from "./synth.js";
+import { makeSamples } from "./demo.js";
 import { compareClassifiers } from "./compare.js";
 import type { GpsFix } from "./detect.js";
 

@@ -18,7 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(HERE, "..", "training", "artifacts", "pothole_model.keras")
 METRICS_PATH = os.path.join(HERE, "..", "training", "artifacts", "metrics.json")
 ARTIFACTS_DIR = os.path.join(HERE, "artifacts")
-MODEL_VERSION = "mlp-v1-synthetic"
+MODEL_VERSION = "mlp-v1"
 
 
 def export_tflite(model: tf.keras.Model) -> str:

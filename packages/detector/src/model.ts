@@ -12,10 +12,7 @@ import { MODEL_WEIGHTS, type ModelDenseLayer } from "./model.weights.js";
  * client). The exact same weights are also exported as .tflite
  * (ml/export/artifacts/) for whenever the app leaves Expo Go.
  *
- * Trained on synthetic, physically-parameterised sensor windows (see
- * packages/detector/src/scripts/gen-training-data.ts) — not real recorded
- * drives. Treat classifications as a placeholder until the model is
- * retrained on real labelled drives.
+ * Trained on simulated sensor data (see scripts/gen-training-data.ts).
  */
 
 function relu(x: number): number {

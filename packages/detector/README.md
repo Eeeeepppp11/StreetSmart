@@ -31,7 +31,7 @@ SensorSample[] ──► gravity projection (mount-independent)
   format. Golden drives replay identically, so detector changes are
   regression-tested without re-driving. The Python `ml/` platform consumes the
   same shape.
-- **`makeSamples`** (`synth.ts`) — deterministic synthetic drives for tests and
+- **`makeSamples`** (`demo.ts`) — deterministic demo drives for tests and
   fixtures; injects sharp/rounded impulses along a configurable gravity axis.
 
 Thresholds live in `config.ts` as data — Phase 1 exists to tune them against

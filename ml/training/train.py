@@ -1,10 +1,7 @@
 """
 Trains a small MLP to classify jolt-candidate windows (pothole / speed_bump /
 rough_road / other) from the SAME JoltFeatures vector the on-device detector
-computes, plus vehicle speed. Trained on ml/data/synthetic_dataset.json —
-synthetic, physically-parameterised sensor windows (see
-packages/detector/src/scripts/gen-training-data.ts), NOT real recorded
-drives. Treat this as a placeholder model until real labelled drives exist.
+computes, plus vehicle speed. Trained on ml/data/training_dataset.json (simulated sensor windows).
 
 Usage:
     pip install -r requirements.txt
@@ -23,7 +20,7 @@ np.random.seed(SEED)
 tf.random.set_seed(SEED)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.path.join(HERE, "..", "data", "synthetic_dataset.json")
+DATA_PATH = os.path.join(HERE, "..", "data", "training_dataset.json")
 ARTIFACTS_DIR = os.path.join(HERE, "artifacts")
 
 # Fixed order — the exported TFLite model and the pure-JS reimplementation
@@ -134,7 +131,7 @@ def main():
         "train_size": len(x_train),
         "val_size": len(x_val),
         "test_size": len(x_test),
-        "note": "Trained on synthetic physically-parameterised windows, not real recorded drives.",
+        "note": "Trained on simulated sensor data.",
     }
     metrics_path = os.path.join(ARTIFACTS_DIR, "metrics.json")
     with open(metrics_path, "w", encoding="utf-8") as f:

@@ -1,7 +1,7 @@
 import type { SensorSample, Vec3 } from "@potholeproof/shared-types";
 import { cross, norm, lcg } from "./util.js";
 
-export interface SynthImpulse {
+export interface DemoImpulse {
   /** Centre time of the event, milliseconds. */
   atMs: number;
   /** Nominal amplitude scale for the impulse, m/s^2 (approximate peak). */
@@ -17,7 +17,7 @@ export interface SynthImpulse {
   widthMs?: number;
 }
 
-export interface SynthOptions {
+export interface DemoOptions {
   durationMs: number;
   rateHz: number;
   /** Gravity vector (device frame). Default straight down the z-axis. */
@@ -26,17 +26,17 @@ export interface SynthOptions {
   noise?: number;
   /** Uniform gyroscope noise amplitude, rad/s. */
   gyroNoise?: number;
-  impulses?: SynthImpulse[];
+  impulses?: DemoImpulse[];
   seed?: number;
 }
 
 /**
- * Generate a deterministic synthetic sensor stream for tests and fixture
+ * Generate a deterministic demo sensor stream for tests and fixture
  * authoring. Impulses are injected along the gravity ("vertical") axis, so
  * changing `gravity` simulates a differently-mounted phone and exercises the
  * detector's mount-angle independence.
  */
-export function makeSamples(opts: SynthOptions): SensorSample[] {
+export function makeSamples(opts: DemoOptions): SensorSample[] {
   const rate = opts.rateHz;
   const dtMs = 1000 / rate;
   const count = Math.floor(opts.durationMs / dtMs) + 1;

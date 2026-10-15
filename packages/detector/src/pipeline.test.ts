@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { LatLng, JoltEvent } from "@potholeproof/shared-types";
-import { makeSamples, type SynthImpulse } from "./synth.js";
+import { makeSamples, type DemoImpulse } from "./demo.js";
 import { runDetection, type GpsFix, type PipelineDeps } from "./detect.js";
 import { DetectionPipeline } from "./pipeline.js";
 
@@ -22,7 +22,7 @@ function gpsTrack(times: number[], speedMps: number): GpsFix[] {
 }
 
 function fixtureSamples() {
-  const impulses: SynthImpulse[] = [
+  const impulses: DemoImpulse[] = [
     { atMs: 600, peak: 12, kind: "sharp" },
     { atMs: 1500, peak: 7, kind: "rounded", gyroPeak: 1.2 },
     { atMs: 2400, peak: 9, kind: "sharp" },

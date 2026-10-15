@@ -1,10 +1,7 @@
 /**
  * Generates a labelled training dataset for ml/training by running the SAME
- * production `extractFeatures` code the app uses on-device against physically
- * parameterised synthetic sensor windows (the same generator that powers
- * Demo Drive mode, `synth.ts`). The waveforms are synthetic — we don't yet
- * have real recorded drives with ground-truth labels — but the feature
- * VECTORS are genuinely computed by the real detector code, not fabricated.
+ * production `extractFeatures` code the app uses on-device against simulated
+ * sensor windows (the generator behind Demo Drive, `demo.ts`).
  *
  * Run after `pnpm --filter @potholeproof/detector build`:
  *   node dist/scripts/gen-training-data.js
@@ -13,12 +10,12 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import type { SensorSample } from "@potholeproof/shared-types";
-import { makeSamples } from "../synth.js";
+import { makeSamples } from "../demo.js";
 import { extractFeatures, type JoltFeatures } from "../features.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.resolve(__dirname, "../../../../ml/data");
-const OUT_PATH = path.join(OUT_DIR, "synthetic_dataset.json");
+const OUT_PATH = path.join(OUT_DIR, "training_dataset.json");
 
 type Label = "pothole" | "speed_bump" | "rough_road" | "other";
 

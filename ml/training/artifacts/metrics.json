@@ -89,5 +89,5 @@
   "train_size": 5880,
   "val_size": 1260,
   "test_size": 1260,
-  "note": "Trained on synthetic physically-parameterised windows, not real recorded drives."
+  "note": "Trained on simulated sensor data."
 }

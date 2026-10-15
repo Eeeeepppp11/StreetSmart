@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { LatLng } from "@potholeproof/shared-types";
-import { makeSamples } from "./synth.js";
+import { makeSamples } from "./demo.js";
 import { runDetection, type GpsFix, type PipelineDeps } from "./detect.js";
-import type { SynthImpulse } from "./synth.js";
+import type { DemoImpulse } from "./demo.js";
 
 const LOC: LatLng = { lat: 37.7749, lng: -122.4194 };
 
@@ -21,7 +21,7 @@ function gpsTrack(times: number[], speedMps: number): GpsFix[] {
   }));
 }
 
-function drive(durationMs: number, impulses: SynthImpulse[]) {
+function drive(durationMs: number, impulses: DemoImpulse[]) {
   return makeSamples({ durationMs, rateHz: 100, noise: 0.05, impulses });
 }
 

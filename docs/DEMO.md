@@ -4,7 +4,7 @@ A 60–90 second video: hook → live detection → the map → the loop → the
 
 ## The cheat code: Demo Drive mode
 
-The app's **"▶ Demo drive (simulated)"** button replays a synthetic road
+The app's **"▶ Demo drive (simulated)"** button replays a demo road
 through the **real** detection engine in real time (~35 s): speed climbs to
 30 mph, four jolts fire with vibration — a pothole, a speed bump (correctly
 identified as one!), a moderate pothole, and a severe one — then it auto-ends

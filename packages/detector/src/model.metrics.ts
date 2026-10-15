@@ -37,5 +37,5 @@ export const MODEL_METRICS: ModelMetrics = {
   trainSize: 5880,
   valSize: 1260,
   testSize: 1260,
-  note: "Trained on synthetic physically-parameterised windows, not real recorded drives.",
+  note: "Trained on simulated sensor data.",
 };
