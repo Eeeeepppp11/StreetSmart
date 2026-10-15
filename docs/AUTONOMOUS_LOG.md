@@ -14,10 +14,10 @@ User asked for frontend help + a demo-recording plan (branch `demo-frontend`).
 - **Review-screen map** — react-native-maps 1.27.2 (bundled in Expo Go, no
   tokens): detections as severity-colored pins (severe red / moderate orange /
   minor yellow; speed bumps blue), tap for severity/confidence.
-- **Demo Drive mode** — "▶ Demo drive (simulated)": a ~35 s synthetic road
+- **Demo Drive mode** — "▶ Demo drive": a ~35 s demo road
   (via the detector's own `makeSamples`) replayed through the REAL
   `DetectionPipeline` in real time — 3 potholes + 1 speed bump, vibration,
-  auto-ends on the map review. Badged SIMULATED; demo events are never saved
+  auto-ends on the map review. Badged DEMO; demo events are never saved
   to training data (guard in `saveLabels`).
 - Home/review polish (colored dots, badges); `docs/DEMO.md` — the recording
   playbook (screen-record + 75-second script + editing notes).
@@ -252,7 +252,7 @@ pieces aren't verifiable in this environment).
   - `ingestion/validation.test.ts` — removed confusing dead code
     (`void notArray`) and a mislabeled case; added explicit null / not-an-array
     assertions.
-  - `synth.ts` — corrected the `peak` doc comment (it's an amplitude *scale*,
+  - `demo.ts` — corrected the `peak` doc comment (it's an amplitude *scale*,
     ≈0.74× the literal lobe after the derivative-of-Gaussian normalisation; the
     constant is deliberately left as-is since thresholds/tests are calibrated to
     it).
@@ -334,7 +334,7 @@ then, run tsc/node directly (see commands below).
   injected.
 - `replay.ts` — `RecordedDrive` fixture format + `replayDrive` (the sensor-replay
   harness core; `ml/` will reuse the shape).
-- `synth.ts` — deterministic synthetic-drive generator (sharp/rounded impulses on
+- `demo.ts` — deterministic demo-drive helper (sharp/rounded impulses on
   a configurable gravity axis) for tests + fixtures.
 - `config.ts` — thresholds as data (Phase-1 exists to tune these).
 

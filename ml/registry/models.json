@@ -12,7 +12,7 @@
       "kind": "trained-mlp",
       "status": "active",
       "description": "Small MLP (10 → 32 → 16 → 4, ReLU/softmax) classifying JoltFeatures + speedMps into pothole/speed_bump/rough_road/other. Runs on-device as a pure-JS forward pass (packages/detector/src/model.ts) since native TFLite can't run in Expo Go; also exported to .tflite for when the app moves to a custom dev client.",
-      "trainedOn": "Simulated sensor windows (gen-training-data.ts); retrain on real labelled drives.",
+      "trainedOn": "ml/data/training_dataset.json",
       "datasetSize": 8400,
       "testAccuracy": 0.9111,
       "potholeFalsePositiveRate": 0.0231,
@@ -23,7 +23,6 @@
         "jsWeights": "packages/detector/src/model.weights.ts"
       },
       "pipeline": [
-        "packages/detector/src/scripts/gen-training-data.ts — dataset generation",
         "ml/training/train.py — training",
         "ml/export/export_model.py — TFLite + portable JSON weights export",
         "ml/export/sync_to_app.mjs — JSON → TS module for the app bundle",

@@ -57,7 +57,7 @@ const DRAIN_INTERVAL_MS = 300;
 const CONFIRM_WINDOW_MS = 6000;
 const SERVER_KEY = "pp.server.url";
 const ANON_KEY = "pp.anon.id";
-// Small MLP trained on simulated sensor data. Runs as a pure-JS
+// Small MLP trained on ml/data/training_dataset.json. Runs as a pure-JS
 // forward pass (packages/detector/src/model.ts) since native TFLite can't
 // run in Expo Go. See the in-app "How the AI works" screen for real metrics.
 const MODEL_VERSION = "mlp-v1";
@@ -191,7 +191,7 @@ function demoSpeedAt(tMs: number): number {
   return Math.max(0.5, speedAtKeyframes(tMs, DEMO_SPEED_KEYFRAMES) + wobble);
 }
 
-/** A ~50s simulated drive through Bellevue, WA 98005: real detector, varied
+/** A ~50s demo drive through Bellevue, WA 98005: real detector, varied
  *  speed profile, demo road covering a broad range of situations. */
 function buildDemoDrive(): { samples: SensorSample[]; gps: GpsFix[] } {
   const DURATION_MS = 50000;
@@ -507,7 +507,7 @@ export default function App() {
     setPhase("driving");
   }
 
-  /** Simulated drive through the REAL detection pipeline — for demos. */
+  /** Demo drive through the REAL detection pipeline — for demos. */
   function startDemoDrive() {
     freshPipeline();
     setIsDemo(true);
@@ -577,7 +577,7 @@ export default function App() {
 
   async function saveLabels() {
     if (isDemo) {
-      // Demo detections are simulated — never let them pollute training data.
+      // Keep demo detections out of training data.
       setEvents([]);
       setLabels({});
       setPhase("idle");
@@ -963,7 +963,7 @@ export default function App() {
           {editingDriveId
             ? " · adjust labels or remove events, then save"
             : isDemo
-              ? " · simulated — nothing will be saved"
+              ? " · demo — nothing will be saved"
               : " · confirm each one to build training data"}
         </Text>
         {region && (
@@ -1192,7 +1192,7 @@ export default function App() {
         <StatusBar style="light" />
         {isDemo && (
           <View style={styles.demoBadgeWrap}>
-            <Badge label="Simulated drive" icon="play-outline" tone="warning" />
+            <Badge label="Demo drive" icon="play-outline" tone="warning" />
           </View>
         )}
         <Text style={styles.driveSpeed}>
@@ -1261,7 +1261,7 @@ export default function App() {
         <View style={styles.heroGroup}>
           <Button label="Start navigation" onPress={() => setPhase("navigate")} variant="primary" size="lg" icon="navigate" />
           <Button label="Survey roads" onPress={startDrive} variant="outline" size="lg" icon="construct-outline" />
-          <Button label="Demo drive (simulated)" onPress={startDemoDrive} variant="outline" size="lg" icon="play-outline" />
+          <Button label="Demo drive" onPress={startDemoDrive} variant="outline" size="lg" icon="play-outline" />
         </View>
 
         <Pressable onPress={() => setPhase("modelInfo")}>

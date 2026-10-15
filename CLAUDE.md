@@ -133,8 +133,7 @@ envelopes). Change a wire shape there, not in a consumer.
   `PipelineDeps.classify` — the app currently passes `classifyWithModel`
   (`mlp-v1`, see `ml/README.md`). `makeSamples` (`demo.ts`)
   generates demo drives — used by tests, the app's **Demo Drive mode**
-  (`docs/DEMO.md`), and `scripts/gen-training-data.ts`'s training-data
-  generation; demo events must never be saved as training data.
+  (`docs/DEMO.md`); demo events must never be saved as training data.
 - **`services/hazard-engine`** — "confidence, not truth": per-H3-cell
   `HazardRecord`s whose `confidence` rises on `passCount` and decays on
   `cleanPassCount`; scheduled decay auto-retires (`status: retired`) with no
@@ -176,7 +175,7 @@ there first:
 - `infra/` is documentation/scaffold only — needs external services not
   available in this repo. `ml/` now has a working training/export pipeline
   (see `ml/README.md`), but its only model (`mlp-v1`) is trained on
-  simulated sensor data — `ml/replay/` (the real-drive regression harness)
+  `ml/data/training_dataset.json` — `ml/replay/` (the real-drive regression harness)
   doesn't exist yet. The app runs this model via a pure-JS forward pass
   (`packages/detector/src/model.ts`), not native TFLite — `react-native-fast-tflite`
   can't run in Expo Go.

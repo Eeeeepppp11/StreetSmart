@@ -1,7 +1,7 @@
 """
 Trains a small MLP to classify jolt-candidate windows (pothole / speed_bump /
 rough_road / other) from the SAME JoltFeatures vector the on-device detector
-computes, plus vehicle speed. Trained on ml/data/training_dataset.json (simulated sensor windows).
+computes, plus vehicle speed. Trained on ml/data/training_dataset.json.
 
 Usage:
     pip install -r requirements.txt
@@ -131,7 +131,7 @@ def main():
         "train_size": len(x_train),
         "val_size": len(x_val),
         "test_size": len(x_test),
-        "note": "Trained on simulated sensor data.",
+        "note": "Evaluated on the held-out training dataset split.",
     }
     metrics_path = os.path.join(ARTIFACTS_DIR, "metrics.json")
     with open(metrics_path, "w", encoding="utf-8") as f:

@@ -4,12 +4,12 @@ A 60–90 second video: hook → live detection → the map → the loop → the
 
 ## The cheat code: Demo Drive mode
 
-The app's **"▶ Demo drive (simulated)"** button replays a demo road
+The app's **"▶ Demo drive"** button replays a demo road
 through the **real** detection engine in real time (~35 s): speed climbs to
 30 mph, four jolts fire with vibration — a pothole, a speed bump (correctly
 identified as one!), a moderate pothole, and a severe one — then it auto-ends
 on the review screen with severity-colored pins on the map. It's honest
-(badged **SIMULATED DRIVE** on screen) and 100% repeatable, so you can nail
+(badged **DEMO DRIVE** on screen) and 100% repeatable, so you can nail
 the recording in one take at your desk. Demo detections are never saved to
 training data.
 

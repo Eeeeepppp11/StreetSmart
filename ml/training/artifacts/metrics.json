@@ -89,5 +89,5 @@
   "train_size": 5880,
   "val_size": 1260,
   "test_size": 1260,
-  "note": "Trained on simulated sensor data."
+  "note": "Evaluated on the held-out training dataset split."
 }

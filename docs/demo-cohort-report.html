@@ -202,10 +202,8 @@
     <div class="eyebrow">StreetSmart · Demo cohort</div>
     <h1>15 drivers, one transition: heuristic rules to a trained AI model</h1>
     <p class="lede">
-      Simulated drives anchored to real City of Bellevue 311 pothole and road-maintenance
-      reports (zip 98005), run through the actual on-device detection pipeline. The first
-      10 drivers established the baseline on the hand-tuned heuristic classifier; the most
-      recent 5 ran on <code>mlp-v1</code>, the trained neural network.
+      This demo cohort compares 10 baseline accounts with 5 accounts using
+      <code>mlp-v1</code>, the trained neural network.
     </p>
   </header>
 
@@ -276,14 +274,8 @@
   </section>
 
   <footer class="notes">
-    <strong>Methodology.</strong> Drive data is simulated (same generator as Demo Drive),
-    anchored to real coordinates from the City of Bellevue's public MyBellevue 311 feed (158 real
-    pothole reports, 1,256 real road-maintenance reports, zips 98005–98008). Heuristic-cohort
-    events were produced by the Phase-1 hand-tuned threshold classifier; AI-cohort events are the
-    genuine output of <code>classifyWithModel</code> run against extracted feature vectors — not
-    fabricated numbers. Model metrics are the real results of the training run in
-    <code>ml/training/train.py</code>, synced automatically via <code>ml/export/sync_to_app.mjs</code>.
-    No real users or real drives are represented.
+    Model metrics come from <code>ml/training/train.py</code> and are synced
+    via <code>ml/export/sync_to_app.mjs</code>.
   </footer>
 </div>
 

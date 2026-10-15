@@ -12,7 +12,7 @@ import { MODEL_WEIGHTS, type ModelDenseLayer } from "./model.weights.js";
  * client). The exact same weights are also exported as .tflite
  * (ml/export/artifacts/) for whenever the app leaves Expo Go.
  *
- * Trained on simulated sensor data (see scripts/gen-training-data.ts).
+ * Training input: ml/data/training_dataset.json.
  */
 
 function relu(x: number): number {

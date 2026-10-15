@@ -67,7 +67,7 @@ A smartphone mounted on a dashboard already carries an accelerometer, a gyroscop
 
 No road trip required. The app's **Demo drive** replays a route through the *real* detection engine in real time: speed climbs, jolts fire, the phone buzzes, and severity-colored pins land on the map.
 
-1. Open the app and tap **Demo drive (simulated)**.
+1. Open the app and tap **Demo drive**.
 2. Watch potholes and a speed bump get detected and classified live.
 3. Review the map, tap a pin, and confirm a detection.
 
