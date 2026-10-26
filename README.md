@@ -51,8 +51,8 @@ A smartphone mounted on a dashboard already carries an accelerometer, a gyroscop
 - **Hazard-aware navigation.** Turn-by-turn routing that scores alternative routes by hazard exposure, offers an "avoid rough roads" mode, and reroutes automatically if you leave the path.
 
 ### Reports
-- **Crowd-gated civic reporting.** Hazards become eligible for submission only after enough independent drivers corroborate them.
-- **Open311-style lifecycle.** Reports move from filed, to under review, to resolved, with photos and status tracking in **My Reports**.
+- **Crowd-gated civic reporting.** Hazards become eligible for submission once enough independent drivers corroborate them.
+- **Open311-style lifecycle.** Reports the status of every pothole from filed, to under review, to resolved, with photos and status tracking in **My Reports**.
 - **City review queue.** Reviewers get an evidence-backed list instead of vague complaints.
 
 ### Respects privacy
